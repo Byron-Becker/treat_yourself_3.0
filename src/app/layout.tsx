@@ -1,7 +1,7 @@
 import { ClerkProvider, SignInButton, SignedIn, SignedOut, UserButton } from '@clerk/nextjs'
 import { Navigation } from '@/components/ui/navigation-menu'
 import { Footer } from '@/components/footer'
-import { cn } from '@/lib/utils'
+import { cn } from '@/components/ui/utils'
 import { Toaster } from '@/components/ui/toaster'
 import { ThemeProvider } from '@/components/theme-provider'
 import { NextProgress } from '@/components/next-progress'
