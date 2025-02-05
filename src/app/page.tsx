@@ -4,6 +4,7 @@ import { useEffect } from 'react'
 import { useTestItems } from '@/lib/supabase/hooks/test'
 import { Button } from '@/components/ui/button'
 import { useToast } from '@/hooks/use-toast'
+import { ErrorTest } from '@/components/test/error-test'
 
 export default function Home() {
   const { items, loading, error, fetchItems, createItem, updateItem, deleteItem } = useTestItems()
@@ -40,38 +41,44 @@ export default function Home() {
   }
 
   return (
-    <div className="p-4 space-y-4">
-      <div className="flex justify-between items-center">
-        <h1 className="text-2xl font-bold">Test Items</h1>
-        <Button onClick={handleCreate} disabled={loading}>
-          Add Item
-        </Button>
+    <div className="container mx-auto py-8 space-y-8">
+      <div className="p-4 space-y-4 border rounded-lg shadow-sm">
+        <div className="flex justify-between items-center">
+          <h1 className="text-2xl font-bold">Test Items</h1>
+          <Button onClick={handleCreate} disabled={loading}>
+            Add Item
+          </Button>
+        </div>
+
+        {loading && <div>Loading...</div>}
+        
+        <div className="space-y-2">
+          {items.map(item => (
+            <div key={item.id} className="flex items-center justify-between p-2 border rounded">
+              <span>{item.content}</span>
+              <div className="space-x-2">
+                <Button 
+                  onClick={() => updateItem(item.id, { content: 'Updated ' + Date.now() })}
+                  variant="outline"
+                  disabled={loading}
+                >
+                  Update
+                </Button>
+                <Button 
+                  onClick={() => deleteItem(item.id)}
+                  variant="destructive"
+                  disabled={loading}
+                >
+                  Delete
+                </Button>
+              </div>
+            </div>
+          ))}
+        </div>
       </div>
 
-      {loading && <div>Loading...</div>}
-      
-      <div className="space-y-2">
-        {items.map(item => (
-          <div key={item.id} className="flex items-center justify-between p-2 border rounded">
-            <span>{item.content}</span>
-            <div className="space-x-2">
-              <Button 
-                onClick={() => updateItem(item.id, { content: 'Updated ' + Date.now() })}
-                variant="outline"
-                disabled={loading}
-              >
-                Update
-              </Button>
-              <Button 
-                onClick={() => deleteItem(item.id)}
-                variant="destructive"
-                disabled={loading}
-              >
-                Delete
-              </Button>
-            </div>
-          </div>
-        ))}
+      <div className="border rounded-lg shadow-sm">
+        <ErrorTest />
       </div>
     </div>
   )
