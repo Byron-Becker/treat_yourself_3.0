@@ -8,9 +8,9 @@ export default function SignInPage() {
       <SignIn
         appearance={{
           elements: {
-            rootBox: "w-full max-w-md px-4",
+            rootBox: "w-full max-w-md px-5",
             card: "shadow-md rounded-lg",
-            main: "px-4 py-4",
+            main: "px-2 py-4",
             footer: "px-4 pb-4"
           }
         }}
