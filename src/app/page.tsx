@@ -20,7 +20,8 @@ export default function Home() {
         title: 'Success',
         description: 'Item created'
       })
-    } catch (_error) {
+    } catch (error) {
+      console.error('Failed to create item:', error)
       toast({
         title: 'Error',
         description: 'Failed to create item',
