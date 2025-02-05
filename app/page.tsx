@@ -1,33 +1,12 @@
-import { createClerkSupabaseClientSsr } from '@/lib/supabase/client-ssr'
-import AddTaskForm from './AddTaskForm'
-
-interface Task {
-  id: number
-  name: string
-}
-
-export default async function Home() {
-  // Create and await the Supabase client
-  const client = await createClerkSupabaseClientSsr()
-
-  // Query the 'tasks' table to render the list of tasks
-  const { data, error } = await client.from('tasks').select('*')
-  if (error) {
-    throw error
-  }
-  const tasks = data as Task[]
-
+export default function Home() {
   return (
-    <div>
-      <h1>Tasks</h1>
-
-      <div>
-        {tasks?.map((task) => (
-          <p key={task.id}>{task.name}</p>
-        ))}
-      </div>
-
-      <AddTaskForm />
+    <div className="flex flex-col items-center justify-center min-h-[60vh] py-12">
+      <h1 className="text-4xl font-bold text-center">
+        Welcome to Your App
+      </h1>
+      <p className="mt-4 text-center text-muted-foreground">
+        Get started by editing app/page.tsx
+      </p>
     </div>
   )
 }
