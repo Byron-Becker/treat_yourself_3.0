@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect } from 'react'
-import { useTestItems } from '@/lib/supabase/hooks/test'
+import { useTestItems } from '@/lib/supabase/hooks/example-hook'
 import { Button } from '@/components/ui/button'
 import { useToast } from '@/hooks/use-toast'
 import { ErrorTest } from '@/components/test/error-test'

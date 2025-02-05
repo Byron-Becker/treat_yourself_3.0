@@ -1,4 +1,5 @@
 import { render, screen, fireEvent, waitFor } from '@testing-library/react'
+import '@testing-library/jest-dom'
 import { ErrorTest } from './error-test'
 import { useErrorHandler } from '@/lib/errors/handlers'
 import { ValidationError, AuthError, NetworkError, NotFoundError } from '@/lib/errors/base'
@@ -26,12 +27,22 @@ describe('ErrorTest Component', () => {
     // Setup mock error handler
     mockHandleError = jest.fn()
     ;(useErrorHandler as jest.Mock).mockReturnValue(mockHandleError)
+
+    // Reset timers before each test
+    jest.useFakeTimers()
   })
 
-  it('should handle validation error correctly', () => {
+  afterEach(() => {
+    jest.useRealTimers()
+  })
+
+  it('should handle validation error correctly', async () => {
     render(<ErrorTest />)
     
-    fireEvent.click(screen.getByText('Test Validation Error'))
+    const button = screen.getByRole('button', { name: /test validation error/i })
+    expect(button).toBeInTheDocument()
+    
+    fireEvent.click(button)
     
     expect(mockHandleError).toHaveBeenCalledWith(
       expect.any(ValidationError)
@@ -44,10 +55,13 @@ describe('ErrorTest Component', () => {
     expect(error.details).toEqual({ field: 'email' })
   })
 
-  it('should handle auth error correctly', () => {
+  it('should handle auth error correctly', async () => {
     render(<ErrorTest />)
     
-    fireEvent.click(screen.getByText('Test Auth Error'))
+    const button = screen.getByRole('button', { name: /test auth error/i })
+    expect(button).toBeInTheDocument()
+    
+    fireEvent.click(button)
     
     expect(mockHandleError).toHaveBeenCalledWith(
       expect.any(AuthError)
@@ -59,10 +73,13 @@ describe('ErrorTest Component', () => {
     expect(error.message).toBe('Session has expired')
   })
 
-  it('should handle network error correctly', () => {
+  it('should handle network error correctly', async () => {
     render(<ErrorTest />)
     
-    fireEvent.click(screen.getByText('Test Network Error'))
+    const button = screen.getByRole('button', { name: /test network error/i })
+    expect(button).toBeInTheDocument()
+    
+    fireEvent.click(button)
     
     expect(mockHandleError).toHaveBeenCalledWith(
       expect.any(NetworkError)
@@ -74,10 +91,13 @@ describe('ErrorTest Component', () => {
     expect(error.message).toBe('Failed to connect to the server')
   })
 
-  it('should handle not found error correctly', () => {
+  it('should handle not found error correctly', async () => {
     render(<ErrorTest />)
     
-    fireEvent.click(screen.getByText('Test Not Found Error'))
+    const button = screen.getByRole('button', { name: /test not found error/i })
+    expect(button).toBeInTheDocument()
+    
+    fireEvent.click(button)
     
     expect(mockHandleError).toHaveBeenCalledWith(
       expect.any(NotFoundError)
@@ -92,18 +112,22 @@ describe('ErrorTest Component', () => {
   it('should handle async error correctly', async () => {
     render(<ErrorTest />)
     
-    const button = screen.getByText('Test Async Error')
+    const button = screen.getByRole('button', { name: /test async error/i })
+    expect(button).toBeInTheDocument()
+    
     fireEvent.click(button)
     
     // Button should be disabled while loading
-    expect(button).toBeDisabled()
+    expect(button).toHaveAttribute('disabled')
     expect(screen.getByText('Loading...')).toBeInTheDocument()
     
+    // Fast-forward timer to complete the setTimeout
+    jest.advanceTimersByTime(1000)
+    
+    // Need to use await act here because we're testing async state updates
     await waitFor(() => {
-      expect(mockHandleError).toHaveBeenCalledWith(
-        expect.any(NetworkError)
-      )
-    })
+      expect(mockHandleError).toHaveBeenCalledWith(expect.any(NetworkError))
+    }, { timeout: 2000 })
     
     const error = mockHandleError.mock.calls[0][0]
     expect(error).toBeInstanceOf(NetworkError)
@@ -115,7 +139,9 @@ describe('ErrorTest Component', () => {
     })
     
     // Button should be re-enabled after error
-    expect(button).not.toBeDisabled()
-    expect(screen.getByText('Test Async Error')).toBeInTheDocument()
+    await waitFor(() => {
+      expect(button).not.toHaveAttribute('disabled')
+      expect(screen.getByText('Test Async Error')).toBeInTheDocument()
+    })
   })
 }) 

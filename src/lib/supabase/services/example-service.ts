@@ -1,7 +1,7 @@
 // src/lib/supabase/services/test.ts
 
 import { BaseService } from './base'
-import type { TestItem, CreateTestItem, UpdateTestItem } from '../types/test'
+import type { TestItem, CreateTestItem, UpdateTestItem } from '../types/example-types'
 
 export class TestService extends BaseService {
   private readonly table = 'test_items'

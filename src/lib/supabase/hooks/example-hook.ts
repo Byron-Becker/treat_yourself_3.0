@@ -2,8 +2,8 @@
 
 import { useState, useCallback } from 'react'
 import { useAuth } from '@clerk/nextjs'
-import type { TestItem, CreateTestItem, UpdateTestItem } from '../types/test'
-import { testService } from '../services/test'
+import type { TestItem, CreateTestItem, UpdateTestItem } from '../types/example-types'
+import { testService } from '../services/example-service'
 import { SupabaseError } from '../errors/supabase'
 
 export function useTestItems() {
