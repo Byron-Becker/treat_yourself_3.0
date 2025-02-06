@@ -3,16 +3,12 @@ This document outlines state management patterns for Feature-Slice Design (FSD) 
 
 Feature Structure:
 
-features/
-  feature-name/
-    model/          # Business logic & state
-      store.ts      # Feature-specific state
-      types.ts      # Feature-specific types
-      constants.ts  # Feature-specific constants
-    ui/            # React components
-    api/           # API integration
-    lib/           # Feature-specific utilities
-    tests/         # Feature tests
+/features/[feature-name]/
+  /types         # Domain types, interfaces, schemas
+  /services      # API/data services
+  /hooks         # Business logic and state
+  /components    # UI components
+  /tests         # Feature-specific tests
 
 Core Principles
 ## Implementation Patterns
