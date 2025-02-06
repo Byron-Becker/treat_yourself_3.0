@@ -1,27 +1,33 @@
-// hooks/use-slide-interaction.ts
+// features/lessons/hooks/use-slide-interaction.ts
 
 import { useState, useCallback } from 'react'
+import { SlideInteraction } from '../model/slide-interaction'
 
 export function useSlideInteraction() {
-    const [interactionState, setInteractionState] = useState<'viewing' | 'answering' | 'reviewing'>('viewing')
-    const [showExplanation, setShowExplanation] = useState(false)
-    const [hasViewedExplanation, setHasViewedExplanation] = useState(false)
-  
-    const handleAnswer = useCallback(() => {
-      setInteractionState('reviewing')
-    }, [])
-  
-    const showExplanationPanel = useCallback(() => {
-      setShowExplanation(true)
-      setHasViewedExplanation(true)
-    }, [])
-  
-    return {
-      interactionState,
-      showExplanation,
-      hasViewedExplanation,
-      handleAnswer,
-      showExplanationPanel
-    }
+  const [interactionModel] = useState(() => new SlideInteraction())
+
+  const handleAnswer = useCallback((optionId: string, correctOptionId: string) => {
+    interactionModel.selectOption(optionId)
+    interactionModel.submit(correctOptionId)
+  }, [interactionModel])
+
+  const showExplanationPanel = useCallback(() => {
+    interactionModel.viewExplanation()
+  }, [interactionModel])
+
+  const reset = useCallback(() => {
+    interactionModel.reset()
+  }, [interactionModel])
+
+  return {
+    state: interactionModel.getState(),
+    selectedOption: interactionModel.getSelectedOption(),
+    isCorrect: interactionModel.isAnswerCorrect(),
+    hasReviewed: interactionModel.hasReviewed(),
+    canSubmit: interactionModel.canSubmit(),
+    canViewExplanation: interactionModel.canViewExplanation(),
+    handleAnswer,
+    showExplanationPanel,
+    reset
   }
-  
+}

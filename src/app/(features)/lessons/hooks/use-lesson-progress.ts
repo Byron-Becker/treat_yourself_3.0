@@ -1,15 +1,15 @@
-// hooks/use-lesson-progress.ts
+// features/lessons/hooks/use-lesson-progress.ts
 
 import { useState, useCallback } from 'react'
 import { useAuth } from '@clerk/nextjs'
+import { LessonProgress } from '../model/lesson-progress'
 import type { Lesson } from '../types/lesson.types'
 import { lessonService } from '../services/lesson.service'
-
 
 export function useLessonProgress() {
   const { userId, getToken } = useAuth()
   const [lesson, setLesson] = useState<Lesson | null>(null)
-  const [completedSlides, setCompletedSlides] = useState<Set<string>>(new Set())
+  const [progressModel] = useState(() => new LessonProgress())
   const [loading, setLoading] = useState(false)
 
   const completeSlide = useCallback(async (slideId: string) => {
@@ -17,18 +17,24 @@ export function useLessonProgress() {
 
     try {
       setLoading(true)
+      progressModel.completeSlide(slideId, lesson.slides.length)
       const token = await getToken({ template: 'supabase' })
-      const updatedLesson = await lessonService.completeSlide(lesson.id, slideId, token)
+      const updatedLesson = await lessonService.completeSlide(
+        lesson.id, 
+        slideId, 
+        token
+      )
       setLesson(updatedLesson)
-      setCompletedSlides(new Set(updatedLesson.completedSlideIds))
     } finally {
-      setLoading(false) 
+      setLoading(false)
     }
-  }, [userId, lesson, getToken])
+  }, [userId, lesson, getToken, progressModel])
 
   return {
     lesson,
-    completedSlides,
+    progress: progressModel.getProgress(),
+    completedSlides: progressModel.getCompletedSlides(),
+    currentIndex: progressModel.getCurrentIndex(),
     loading,
     completeSlide
   }

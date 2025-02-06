@@ -1,36 +1,62 @@
-import { useLessonNavigation } from "./use-lesson-navigation"
-import { useLessonProgress } from "./use-lesson-progress"
-import { useSlideInteraction } from "./use-slide-interaction"
-import { useSlideScroll } from "./use-slide-scroll"
+// features/lessons/hooks/use-lesson.ts
 
-// hooks/use-lesson.ts (composition hook)
+import { useLessonProgress } from './use-lesson-progress'
+import { useSlideInteraction } from './use-slide-interaction'
+import { useViewportScroll } from './use-viewport-scroll'
+
 export function useLesson() {
-    const { lesson, completedSlides, loading, completeSlide } = useLessonProgress()
-    const { currentIndex, visibleSlides, showNextSlide } = useLessonNavigation(lesson?.slides)
-    const { scrollToSlide } = useSlideScroll()
-    const { 
-      interactionState,
-      showExplanation,
-      hasViewedExplanation,
-      handleAnswer,
-      showExplanationPanel
-    } = useSlideInteraction()
-  
-    // Compose behavior here
-  
-    return {
-      lesson,
-      currentIndex,
-      visibleSlides,
-      completedSlides,
-      loading,
-      interactionState,
-      showExplanation,
-      hasViewedExplanation,
-      completeSlide,
-      showNextSlide,
-      scrollToSlide,
-      handleAnswer,
-      showExplanationPanel
-    }
+  const {
+    lesson,
+    progress,
+    completedSlides,
+    currentIndex,
+    loading,
+    completeSlide
+  } = useLessonProgress()
+
+  const {
+    state: interactionState,
+    selectedOption,
+    isCorrect,
+    hasReviewed,
+    canSubmit,
+    canViewExplanation,
+    handleAnswer,
+    showExplanationPanel,
+    reset: resetInteraction
+  } = useSlideInteraction()
+
+  const {
+    updateSlidePosition,
+    scrollToSlide,
+    activeSlideId,
+    lastScrollPosition
+  } = useViewportScroll()
+
+  return {
+    // Lesson Progress
+    lesson,
+    progress,
+    completedSlides,
+    currentIndex,
+    loading,
+    completeSlide,
+
+    // Interaction State  
+    interactionState,
+    selectedOption,
+    isCorrect,
+    hasReviewed,
+    canSubmit,
+    canViewExplanation,
+    handleAnswer,
+    showExplanationPanel,
+    resetInteraction,
+
+    // Viewport/Scroll
+    updateSlidePosition,
+    scrollToSlide,
+    activeSlideId,
+    lastScrollPosition
   }
+}
