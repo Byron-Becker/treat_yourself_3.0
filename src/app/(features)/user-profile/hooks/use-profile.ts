@@ -66,30 +66,38 @@ export function useProfile() {
   }, [authState, handleError])
 
   const updateProfile = useCallback(async (updates: UpdateUserProfile) => {
-    if (!authState.userId) return
+    if (!authState.userId || !profile) return
+
+    // Optimistic update
+    const previousProfile = profile
+    const optimisticProfile = { ...profile, ...updates }
+    setProfile(optimisticProfile)
 
     try {
       setLoading(true)
-      setError(null)
       const token = await authState.getToken({ template: 'supabase' })
       const updated = await userProfileService.updateProfile(authState.userId, updates, token)
+      
       if (isMounted.current) {
+        // Update with actual server response
         setProfile(updated)
       }
       return updated
     } catch (err) {
-      const supabaseError = SupabaseError.fromError(err)
+      // Revert to previous state on error
       if (isMounted.current) {
+        setProfile(previousProfile)
+        const supabaseError = SupabaseError.fromError(err)
         setError(supabaseError)
         handleError(supabaseError)
       }
-      throw supabaseError
+      throw err
     } finally {
       if (isMounted.current) {
         setLoading(false)
       }
     }
-  }, [authState, handleError])
+  }, [authState, handleError, profile])
 
   useEffect(() => {
     isMounted.current = true
