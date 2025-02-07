@@ -3,8 +3,9 @@
 import { useLessonProgress } from './use-lesson-progress'
 import { useSlideInteraction } from './use-slide-interaction'
 import { useViewportScroll } from './use-viewport-scroll'
+import { useMemo } from 'react'
 
-export function useLesson() {
+export function useLesson(lessonId?: string) {
   const {
     lesson,
     progress,
@@ -12,7 +13,7 @@ export function useLesson() {
     currentIndex,
     loading,
     completeSlide
-  } = useLessonProgress()
+  } = useLessonProgress(lessonId)
 
   const {
     state: interactionState,
@@ -33,9 +34,17 @@ export function useLesson() {
     lastScrollPosition
   } = useViewportScroll()
 
+  // Calculate visible slides based on lesson data and current index
+  const visibleSlides = useMemo(() => {
+    if (!lesson?.slides) return []
+    // Only show current slide
+    return lesson.slides.slice(0, currentIndex + 1)
+  }, [lesson?.slides, currentIndex])
+
   return {
     // Lesson Progress
     lesson,
+    visibleSlides,
     progress,
     completedSlides,
     currentIndex,

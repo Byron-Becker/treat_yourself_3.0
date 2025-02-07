@@ -25,6 +25,11 @@ interface LessonProgressState {
       this.state.completedSlideIds.add(slideId)
       this.state.progress = (this.state.completedSlideIds.size / totalSlides) * 100
       
+      // Advance to next slide if not at the end
+      if (this.state.currentSlideIndex < totalSlides - 1) {
+        this.state.currentSlideIndex++
+      }
+      
       if (this.state.progress === 100) {
         this.state.isCompleted = true
       }
