@@ -8,6 +8,7 @@ import { Card } from '@/components/ui/card'
 import { InfoBulletSlide as InfoBulletSlideType } from '../../../types/lesson.types'
 import { cn } from '@/components/ui/utils'
 import Image from 'next/image'
+import { ImageErrorBoundary } from '../image-error-boundary'
 
 interface InfoBulletSlideProps {
   content: InfoBulletSlideType
@@ -34,16 +35,19 @@ export function InfoBulletSlide({
       >
         {content.imageUrl && (
           <motion.div 
-            className="w-full aspect-video mb-6"
+            className="relative w-full h-[240px] mb-6"
             initial={{ scale: 0.95 }}
             animate={{ scale: 1 }}
           >
-            <Image
-              src={content.imageUrl}
-              alt={content.title}
-              fill
-              className="object-cover rounded-lg"
-            />
+            <ImageErrorBoundary>
+              <Image
+                src={content.imageUrl}
+                alt={content.title}
+                fill
+                className="object-cover rounded-lg"
+                sizes="(max-width: 768px) 100vw, 768px"
+              />
+            </ImageErrorBoundary>
           </motion.div>
         )}
 
