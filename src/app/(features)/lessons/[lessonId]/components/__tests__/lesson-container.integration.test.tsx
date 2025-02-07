@@ -106,4 +106,23 @@ describe('LessonContainer Integration', () => {
       expect(mockScrollToSlide).toHaveBeenCalledWith(mockSlides[0].id)
     })
   })
+//   it('should handle errors during lesson completion', async () => {
+//     const mockError = new Error('Failed to complete lesson')
+//     const mockComplete = jest.fn().mockRejectedValue(mockError)
+  
+//     ;(useLessonCompletion as jest.Mock).mockReturnValue({
+//       complete: mockComplete,
+//       isCompleting: false,
+//       error: mockError
+//     })
+  
+//     render(<LessonContainer lessonId={mockLessonId} />)
+  
+//     const continueButton = screen.getByText('Continue')
+//     fireEvent.click(continueButton)
+  
+//     await waitFor(() => {
+//       expect(mockComplete).toHaveBeenCalled()
+//     })
+//   })
 })

@@ -129,9 +129,17 @@ export function LessonContainer({ lessonId }: LessonContainerProps) {
       // Complete the slide first
       completeSlide(slideId)
       
-      // If this was the last slide, mark the lesson as complete
+      // If this was the last slide, attempt to mark as complete
       if (currentIndex === visibleSlides.length - 1) {
-        await complete()
+        try {
+          await complete()
+        } catch (error) {
+          // Silently ignore duplicate completion errors
+          // Still log other errors
+          if (!error.message?.includes('duplicate key')) {
+            console.error('Error completing lesson:', error)
+          }
+        }
       }
       
       // Scroll to next slide if available
@@ -139,7 +147,7 @@ export function LessonContainer({ lessonId }: LessonContainerProps) {
         scrollToSlide(slideId)
       }, 100)
     } catch (error) {
-      console.error('Error completing lesson:', error)
+      console.error('Error completing slide:', error)
     }
   }
 

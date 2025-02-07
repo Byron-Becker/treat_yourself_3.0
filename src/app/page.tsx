@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button'
 import { useToast } from '@/hooks/use-toast'
 import { ErrorTest } from '@/components/test/error-test'
 import Link from 'next/link'
+import { UserButton, SignIn } from '@clerk/nextjs'
 
 export default function Home() {
   const { items, loading, error, fetchItems, createItem, updateItem, deleteItem } = useTestItems()
@@ -46,6 +47,12 @@ export default function Home() {
       <div className="p-4 space-y-4 border rounded-lg shadow-sm">
         <div className="flex justify-between items-center">
           <h1 className="text-2xl font-bold">Test Items</h1>
+          <UserButton />
+         <button>
+          <Link href="/sign-in">
+            sign in
+          </Link>
+         </button>
           <Button onClick={handleCreate} disabled={loading}>
             Add Item
           </Button>
