@@ -51,8 +51,11 @@ export default function RootLayout({ children, className }: RootLayoutProps) {
               style={{ scrollBehavior: 'smooth' }}
             >
               {/* Progress bar for page loads */}
-              <NextProgress />
-              
+
+              <Suspense fallback={<div>Loading...</div>}>
+                <NextProgress />
+                {children}
+              </Suspense>
               {/* Inner content wrapper */}
               <div className={cn(
                 "flex-1 container mx-auto",
