@@ -3,7 +3,7 @@
 import { useState, useCallback, useEffect } from 'react'
 import { useAuth } from '@clerk/nextjs'
 import { LessonProgress } from '../model/lesson-progress'
-import type { Lesson } from '../types/lesson.types'
+import type { Lesson, Slide } from '../types/lesson.types'
 import { exerciseLessonContent } from '../data/exercise-content'
 import { postureLessonContent } from '../data/posture-content'
 
@@ -30,7 +30,7 @@ export function useLessonProgress(lessonId?: string) {
           const lessonData: Lesson = {
             id: lessonId || 'default',
             title: lessonId === 'exercise-lesson' ? 'Exercise Lesson' : 'Posture Lesson',
-            slides,
+            slides: slides as Slide[],
             progress: 0,
             currentSlideIndex: 0,
             completedSlideIds: [],

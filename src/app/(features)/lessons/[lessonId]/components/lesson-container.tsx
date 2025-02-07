@@ -120,7 +120,6 @@ export function LessonContainer({ lessonId }: LessonContainerProps) {
     activeSlideId
   } = useLesson(lessonId)
 
-  const prevBoundsRef = useRef<{ top: number; bottom: number } | null>(null);
 
   useEffect(() => {
     
