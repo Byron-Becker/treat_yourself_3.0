@@ -54,7 +54,6 @@ export default function RootLayout({ children, className }: RootLayoutProps) {
 
               <Suspense fallback={<div>Loading...</div>}>
                 <NextProgress />
-                {children}
               </Suspense>
               {/* Inner content wrapper */}
               <div className={cn(
