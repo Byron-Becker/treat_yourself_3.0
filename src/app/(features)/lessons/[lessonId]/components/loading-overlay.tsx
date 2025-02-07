@@ -1,5 +1,7 @@
 // app/lessons/[lessonId]/components/loading-overlay.tsx
 
+import { cn } from "@/components/ui/utils"
+
 export function LoadingOverlay() {
     return (
       <div className={cn(
