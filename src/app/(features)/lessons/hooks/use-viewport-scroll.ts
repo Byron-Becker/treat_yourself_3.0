@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 
 interface ViewportBounds {
   top: number;
@@ -15,21 +15,17 @@ export function useViewportScroll() {
   const [slidePositions, setSlidePositions] = useState<Map<string, SlidePosition>>(new Map());
   const [activeSlideId, setActiveSlideId] = useState<string | null>(null);
   const [lastScrollPosition, setLastScrollPosition] = useState<number>(0);
-  const lastScrollPositionRef = useCallback((value: number) => {
-    setLastScrollPosition(value);
-  }, []);
+  const lastScrollPositionRef = useRef<number>(0);
 
   const updateSlidePosition = useCallback((slideId: string, bounds: ViewportBounds) => {
     setSlidePositions(prev => {
       const newPositions = new Map(prev);
       newPositions.set(slideId, { slideId, bounds, isActive: false });
-      
       return newPositions;
     });
   }, []);
 
   const scrollToSlide = useCallback((index: number) => {
-   
     const slides = document.querySelectorAll('.slide-item');
     const targetSlide = slides[index];
     
@@ -39,6 +35,7 @@ export function useViewportScroll() {
     const scrollPosition = slideRect.top + window.scrollY - 20;
 
     lastScrollPositionRef.current = scrollPosition;
+    setLastScrollPosition(scrollPosition);
 
     window.scrollTo({
       top: Math.max(0, scrollPosition),
@@ -47,7 +44,6 @@ export function useViewportScroll() {
 
     const verifyScroll = () => {
       const currentPosition = window.scrollY;
-
       if (Math.abs(currentPosition - lastScrollPositionRef.current) > 2) {
         window.scrollTo(0, lastScrollPositionRef.current);
       }
@@ -60,7 +56,6 @@ export function useViewportScroll() {
     const handleScroll = () => {
       const scrollPosition = window.scrollY;
       setLastScrollPosition(scrollPosition);
-      
 
       slidePositions.forEach((position, slideId) => {
         const isVisible =
@@ -69,7 +64,6 @@ export function useViewportScroll() {
 
         if (isVisible && activeSlideId !== slideId) {
           setActiveSlideId(slideId);
-          
         }
       });
     };

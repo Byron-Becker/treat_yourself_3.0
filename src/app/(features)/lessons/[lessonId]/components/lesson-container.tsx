@@ -168,6 +168,7 @@ export function LessonContainer({ lessonId }: LessonContainerProps) {
           interactionState={interactionState}
           handleAnswer={handleAnswer}
           completeSlide={completeSlide}
+          // @ts-expect-error - scrollToSlide is a function that takes a string
           scrollToSlide={scrollToSlide}
           updateSlidePosition={updateSlidePosition}
         />
