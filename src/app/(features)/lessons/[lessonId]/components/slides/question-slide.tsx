@@ -24,14 +24,12 @@ export function QuestionSlide({
   content, 
   isActive, 
   isCompleted, 
-  interactionState,
   onAnswer,
   onComplete 
 }: QuestionSlideProps) {
   const [selectedId, setSelectedId] = useState<string | null>(null)
 
   const correctOption = content.options.find(opt => opt.isCorrect)
-  const isCorrect = selectedId === correctOption?.id
 
   return (
     <Card className={cn(

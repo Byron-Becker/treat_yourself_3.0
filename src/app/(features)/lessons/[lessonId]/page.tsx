@@ -3,15 +3,14 @@
 import { ErrorBoundary } from '@/components/error-boundary'
 import { LessonContainer } from './components/lesson-container'
 
-
 interface PageProps {
-  params: {
+  params: Promise<{
     lessonId: string
-  }
+  }>
 }
 
 export default async function LessonPage({ params }: PageProps) {
-  const { lessonId } = await params; // Awaiting params
+  const { lessonId } = await params
 
   return (
     <ErrorBoundary>

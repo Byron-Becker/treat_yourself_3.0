@@ -1,11 +1,11 @@
-import { ClerkProvider, SignInButton, SignedIn, SignedOut, UserButton } from '@clerk/nextjs'
-import { Navigation } from '@/components/ui/navigation-menu'
+import { ClerkProvider} from '@clerk/nextjs'
 import { Footer } from '@/components/footer'
 import { cn } from '@/components/ui/utils'
 import { Toaster } from '@/components/ui/toaster'
 import { ThemeProvider } from '@/components/theme-provider'
 import { NextProgress } from '@/components/next-progress'
 import { ErrorBoundary } from '@/components/error-boundary'
+import { Suspense } from 'react'
 import './globals.css'
 
 interface RootLayoutProps {
@@ -44,14 +44,6 @@ export default function RootLayout({ children, className }: RootLayoutProps) {
               Skip to main content
             </a>
 
-            {/* <Navigation className="flex-none z-50">
-              <SignedOut>
-                <SignInButton />
-              </SignedOut>
-              <SignedIn>
-                <UserButton />
-              </SignedIn>
-            </Navigation> */}
             
             <main 
               id="main-content"
@@ -69,7 +61,9 @@ export default function RootLayout({ children, className }: RootLayoutProps) {
                 "mb-safe-offset-bottom"
               )}>
                 <ErrorBoundary>
-                  {children}
+                  <Suspense fallback={<div>Loading...</div>}>
+                    {children}
+                  </Suspense>
                 </ErrorBoundary>
               </div>
             </main>
