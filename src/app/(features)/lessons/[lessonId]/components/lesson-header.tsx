@@ -2,17 +2,19 @@
 
 'use client'
 
-import { ArrowLeft } from 'lucide-react'
+import { ArrowLeft, CheckCircle } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Progress } from '@/components/ui/progress'
 import { useRouter } from 'next/navigation'
 import { cn } from '@/components/ui/utils'
 
 interface LessonHeaderProps {
- className?: string
+  className?: string
+  progress: number
+  isCompleted?: boolean
 }
 
-export function LessonHeader({ className }: LessonHeaderProps) {
+export function LessonHeader({ className, progress, isCompleted }: LessonHeaderProps) {
  const router = useRouter()
 
  return (
@@ -34,13 +36,16 @@ export function LessonHeader({ className }: LessonHeaderProps) {
 
        <div className="flex-1 min-w-0">
          <Progress 
-           value={50} // Will come from lesson progress
+           value={progress}
            className="h-2" 
          />
        </div>
 
-       <div className="shrink-0 text-sm font-medium">
-         50% {/* Will come from lesson progress */}
+       <div className="shrink-0 text-sm font-medium flex items-center gap-2">
+         {progress}%
+         {isCompleted && (
+           <CheckCircle className="h-4 w-4 text-green-500" />
+         )}
        </div>
      </div>
    </header>

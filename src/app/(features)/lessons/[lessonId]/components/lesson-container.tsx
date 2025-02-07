@@ -10,6 +10,7 @@ import { LoadingOverlay } from '../components/loading-overlay'
 import { cn } from '@/components/ui/utils'
 import { memo, useEffect, useRef } from 'react'
 import type { Slide } from '../../types/lesson.types'
+import { useLessonCompletion } from '../../hooks/use-lesson-completion'
 
 interface LessonContainerProps {
   lessonId: string
@@ -120,6 +121,27 @@ export function LessonContainer({ lessonId }: LessonContainerProps) {
     activeSlideId
   } = useLesson(lessonId)
 
+  const { complete, isCompleting } = useLessonCompletion(lessonId)
+
+  // Handle final slide completion
+  const handleFinalSlideCompletion = async (slideId: string) => {
+    try {
+      // Complete the slide first
+      completeSlide(slideId)
+      
+      // If this was the last slide, mark the lesson as complete
+      if (currentIndex === visibleSlides.length - 1) {
+        await complete()
+      }
+      
+      // Scroll to next slide if available
+      setTimeout(() => {
+        scrollToSlide(slideId)
+      }, 100)
+    } catch (error) {
+      console.error('Error completing lesson:', error)
+    }
+  }
 
   useEffect(() => {
     
@@ -156,7 +178,7 @@ export function LessonContainer({ lessonId }: LessonContainerProps) {
       "w-full max-w-2xl mx-auto",
       "space-y-6 py-6"
     )}>
-      {loading && <LoadingOverlay />}
+      {(loading || isCompleting) && <LoadingOverlay />}
 
       {visibleSlides?.map((slide, index) => (
         <SlideWrapper
@@ -167,8 +189,7 @@ export function LessonContainer({ lessonId }: LessonContainerProps) {
           completedSlides={completedSlides}
           interactionState={interactionState}
           handleAnswer={handleAnswer}
-          completeSlide={completeSlide}
-          // @ts-expect-error - scrollToSlide is a function that takes a string
+          completeSlide={handleFinalSlideCompletion}
           scrollToSlide={scrollToSlide}
           updateSlidePosition={updateSlidePosition}
         />

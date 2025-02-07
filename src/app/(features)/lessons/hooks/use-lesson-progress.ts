@@ -60,10 +60,12 @@ export function useLessonProgress(lessonId?: string) {
       // Update local lesson state
       setLesson(prev => {
         if (!prev) return null
+        const newCompletedSlideIds = [...prev.completedSlideIds, slideId]
         return {
           ...prev,
-          completedSlideIds: [...prev.completedSlideIds, slideId],
-          progress: progressModel.getProgress()
+          completedSlideIds: newCompletedSlideIds,
+          progress: progressModel.getProgress(),
+          isCompleted: newCompletedSlideIds.length === lesson.slides.length
         }
       })
     } finally {
@@ -77,6 +79,7 @@ export function useLessonProgress(lessonId?: string) {
     completedSlides: new Set(lesson?.completedSlideIds || []),
     currentIndex: progressModel.getCurrentIndex(),
     loading,
-    completeSlide
+    completeSlide,
+    isCompleted: lesson?.completedSlideIds.length === lesson?.slides.length
   }
 }
