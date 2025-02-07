@@ -44,14 +44,14 @@ export default function RootLayout({ children, className }: RootLayoutProps) {
               Skip to main content
             </a>
 
-            <Navigation className="flex-none z-50">
+            {/* <Navigation className="flex-none z-50">
               <SignedOut>
                 <SignInButton />
               </SignedOut>
               <SignedIn>
                 <UserButton />
               </SignedIn>
-            </Navigation>
+            </Navigation> */}
             
             <main 
               id="main-content"

@@ -10,10 +10,12 @@ interface PageProps {
   }
 }
 
-export default function LessonPage({ params }: PageProps) {
+export default async function LessonPage({ params }: PageProps) {
+  const { lessonId } = await params; // Awaiting params
+
   return (
     <ErrorBoundary>
-      <LessonContainer lessonId={params.lessonId} />
+      <LessonContainer lessonId={lessonId} />
     </ErrorBoundary>
   )
 }
