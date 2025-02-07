@@ -1,35 +1,87 @@
-// features/lessons/hooks/use-viewport-scroll.ts
+import { useState, useEffect, useCallback } from 'react';
 
-import { useState, useCallback } from 'react'
-import { ViewportState } from '../model/viewport-state'
+interface ViewportBounds {
+  top: number;
+  bottom: number;
+}
+
+interface SlidePosition {
+  slideId: string;
+  bounds: ViewportBounds;
+  isActive: boolean;
+}
 
 export function useViewportScroll() {
-  const [viewportModel] = useState(() => new ViewportState())
+  const [slidePositions, setSlidePositions] = useState<Map<string, SlidePosition>>(new Map());
+  const [activeSlideId, setActiveSlideId] = useState<string | null>(null);
+  const [lastScrollPosition, setLastScrollPosition] = useState<number>(0);
+  const lastScrollPositionRef = useCallback((value: number) => {
+    setLastScrollPosition(value);
+  }, []);
 
-  const updateSlidePosition = useCallback((
-    slideId: string, 
-    bounds: { top: number; bottom: number }
-  ) => {
-    viewportModel.updateSlidePosition(slideId, bounds)
-  }, [viewportModel])
+  const updateSlidePosition = useCallback((slideId: string, bounds: ViewportBounds) => {
+    setSlidePositions(prev => {
+      const newPositions = new Map(prev);
+      newPositions.set(slideId, { slideId, bounds, isActive: false });
+      console.log(`Updated position for slide ${slideId}:`, bounds);
+      return newPositions;
+    });
+  }, []);
 
-  const scrollToSlide = useCallback((slideId: string) => {
-    const bounds = viewportModel.getSlideBounds(slideId)
-    if (!bounds) return
-
-    const scrollPosition = bounds.top
-    viewportModel.recordScrollPosition(scrollPosition)
+  const scrollToSlide = useCallback((index: number) => {
+    const container = document.documentElement;
+    const slides = document.querySelectorAll('.slide-item');
+    const targetSlide = slides[index];
     
+    if (!targetSlide) return;
+
+    const slideRect = targetSlide.getBoundingClientRect();
+    const scrollPosition = slideRect.top + window.scrollY - 20;
+
+    lastScrollPositionRef.current = scrollPosition;
+
     window.scrollTo({
       top: Math.max(0, scrollPosition),
       behavior: 'smooth'
-    })
-  }, [viewportModel])
+    });
+
+    const verifyScroll = () => {
+      const currentPosition = window.scrollY;
+
+      if (Math.abs(currentPosition - lastScrollPositionRef.current) > 2) {
+        window.scrollTo(0, lastScrollPositionRef.current);
+      }
+    };
+
+    setTimeout(verifyScroll, 1000);
+  }, []);
+
+  useEffect(() => {
+    const handleScroll = () => {
+      const scrollPosition = window.scrollY;
+      setLastScrollPosition(scrollPosition);
+      console.log('Current scroll position:', scrollPosition);
+
+      slidePositions.forEach((position, slideId) => {
+        const isVisible =
+          position.bounds.bottom >= scrollPosition &&
+          position.bounds.top <= scrollPosition + window.innerHeight;
+
+        if (isVisible && activeSlideId !== slideId) {
+          setActiveSlideId(slideId);
+          console.log(`Active slide changed to ${slideId}`);
+        }
+      });
+    };
+
+    window.addEventListener('scroll', handleScroll);
+    return () => window.removeEventListener('scroll', handleScroll);
+  }, [slidePositions, activeSlideId]);
 
   return {
     updateSlidePosition,
     scrollToSlide,
-    activeSlideId: viewportModel.getActiveSlideId(),
-    lastScrollPosition: viewportModel.getLastScrollPosition()
-  }
+    activeSlideId,
+    lastScrollPosition,
+  };
 }

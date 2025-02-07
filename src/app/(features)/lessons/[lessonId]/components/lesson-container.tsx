@@ -8,7 +8,7 @@ import { QuestionSlide } from '../components/slides/question-slide'
 import { InfoBulletSlide } from '../components/slides/info-bullet-slide'
 import { LoadingOverlay } from '../components/loading-overlay'
 import { cn } from '@/components/ui/utils'
-import { memo } from 'react'
+import { memo, useEffect, useRef } from 'react'
 import type { Slide } from '../../types/lesson.types'
 
 interface LessonContainerProps {
@@ -38,16 +38,22 @@ const SlideWrapper = memo(function SlideWrapper({
   scrollToSlide,
   updateSlidePosition 
 }: SlideWrapperProps) {
+  const prevBoundsRef = useRef<{ top: number; bottom: number } | null>(null);
+
   return (
     <div 
       className="slide-item"
       ref={el => {
         if (el) {
-          const bounds = el.getBoundingClientRect()
-          updateSlidePosition(slide.id, {
-            top: bounds.top,
-            bottom: bounds.bottom
-          })
+          const bounds = el.getBoundingClientRect();
+          const prevBounds = prevBoundsRef.current;
+          if (!prevBounds || prevBounds.top !== bounds.top || prevBounds.bottom !== bounds.bottom) {
+            updateSlidePosition(slide.id, {
+              top: bounds.top,
+              bottom: bounds.bottom
+            });
+            prevBoundsRef.current = bounds;
+          }
         }
       }}
     >
@@ -58,7 +64,9 @@ const SlideWrapper = memo(function SlideWrapper({
           isCompleted={completedSlides.has(slide.id)}
           onComplete={() => {
             completeSlide(slide.id)
-            scrollToSlide(slide.id)
+            setTimeout(() => {
+              scrollToSlide(slide.id);
+            }, 100);
           }}
         />
       )}
@@ -72,7 +80,9 @@ const SlideWrapper = memo(function SlideWrapper({
           onAnswer={handleAnswer}
           onComplete={() => {
             completeSlide(slide.id)
-            scrollToSlide(slide.id)
+            setTimeout(() => {
+              scrollToSlide(slide.id);
+            }, 100);
           }}
         />
       )}
@@ -84,7 +94,9 @@ const SlideWrapper = memo(function SlideWrapper({
           isCompleted={completedSlides.has(slide.id)}
           onComplete={() => {
             completeSlide(slide.id)
-            scrollToSlide(slide.id)
+            setTimeout(() => {
+              scrollToSlide(slide.id);
+            }, 100);
           }}
         />
       )}
@@ -103,8 +115,40 @@ export function LessonContainer({ lessonId }: LessonContainerProps) {
     handleAnswer,
     completeSlide,
     scrollToSlide,
-    updateSlidePosition
+    updateSlidePosition,
+    lastScrollPosition,
+    activeSlideId
   } = useLesson(lessonId)
+
+  const prevBoundsRef = useRef<{ top: number; bottom: number } | null>(null);
+
+  useEffect(() => {
+    console.log('Lesson loaded:', lesson);
+  }, [lesson]);
+
+  useEffect(() => {
+    console.log('Visible slides updated:', visibleSlides);
+  }, [visibleSlides]);
+
+  useEffect(() => {
+    console.log('Current index changed:', currentIndex);
+  }, [currentIndex]);
+
+  useEffect(() => {
+    console.log('Completed slides updated:', completedSlides);
+  }, [completedSlides]);
+
+  useEffect(() => {
+    console.log('Interaction state changed:', interactionState);
+  }, [interactionState]);
+
+  useEffect(() => {
+    console.log('Active slide ID:', activeSlideId);
+  }, [activeSlideId]);
+
+  useEffect(() => {
+    console.log('Last scroll position:', lastScrollPosition);
+  }, [lastScrollPosition]);
 
   if (!lesson) return null
 
