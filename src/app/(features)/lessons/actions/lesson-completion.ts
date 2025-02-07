@@ -1,9 +1,18 @@
-// /features/lessons/actions/lesson-completion.ts
+// features/lessons/actions/lesson-completion.ts
 'use server'
 
 import { lessonCompletionService } from '../services/lesson-completion.service'
 import type { LessonCompletion } from '../types/db.types'
 
-export async function createCompletion(lessonId: string, token: string | null): Promise<LessonCompletion> {
-  return lessonCompletionService.createCompletion({ lesson_id: lessonId }, token)
+export async function createCompletion(lessonId: string, token: string | null): Promise<LessonCompletion | null> {
+ try {
+   return await lessonCompletionService.createCompletion({ lesson_id: lessonId }, token)
+ } catch (error) {
+   // Silently handle duplicate completions
+   if (error?.code === 'UNIQUE_VIOLATION') {
+     return null
+   }
+   // Rethrow other errors
+   throw error
+ }
 }
