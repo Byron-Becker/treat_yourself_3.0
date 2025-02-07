@@ -123,31 +123,31 @@ export function LessonContainer({ lessonId }: LessonContainerProps) {
   const prevBoundsRef = useRef<{ top: number; bottom: number } | null>(null);
 
   useEffect(() => {
-    console.log('Lesson loaded:', lesson);
+    
   }, [lesson]);
 
   useEffect(() => {
-    console.log('Visible slides updated:', visibleSlides);
+    
   }, [visibleSlides]);
 
   useEffect(() => {
-    console.log('Current index changed:', currentIndex);
+    
   }, [currentIndex]);
 
   useEffect(() => {
-    console.log('Completed slides updated:', completedSlides);
+    
   }, [completedSlides]);
 
   useEffect(() => {
-    console.log('Interaction state changed:', interactionState);
+    
   }, [interactionState]);
 
   useEffect(() => {
-    console.log('Active slide ID:', activeSlideId);
+    
   }, [activeSlideId]);
 
   useEffect(() => {
-    console.log('Last scroll position:', lastScrollPosition);
+    
   }, [lastScrollPosition]);
 
   if (!lesson) return null

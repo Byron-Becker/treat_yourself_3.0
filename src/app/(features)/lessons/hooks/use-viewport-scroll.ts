@@ -23,13 +23,13 @@ export function useViewportScroll() {
     setSlidePositions(prev => {
       const newPositions = new Map(prev);
       newPositions.set(slideId, { slideId, bounds, isActive: false });
-      console.log(`Updated position for slide ${slideId}:`, bounds);
+      
       return newPositions;
     });
   }, []);
 
   const scrollToSlide = useCallback((index: number) => {
-    const container = document.documentElement;
+   
     const slides = document.querySelectorAll('.slide-item');
     const targetSlide = slides[index];
     
@@ -60,7 +60,7 @@ export function useViewportScroll() {
     const handleScroll = () => {
       const scrollPosition = window.scrollY;
       setLastScrollPosition(scrollPosition);
-      console.log('Current scroll position:', scrollPosition);
+      
 
       slidePositions.forEach((position, slideId) => {
         const isVisible =
@@ -69,7 +69,7 @@ export function useViewportScroll() {
 
         if (isVisible && activeSlideId !== slideId) {
           setActiveSlideId(slideId);
-          console.log(`Active slide changed to ${slideId}`);
+          
         }
       });
     };
