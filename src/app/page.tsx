@@ -5,6 +5,7 @@ import { useTestItems } from '@/lib/supabase/hooks/example-hook'
 import { Button } from '@/components/ui/button'
 import { useToast } from '@/hooks/use-toast'
 import { ErrorTest } from '@/components/test/error-test'
+import Link from 'next/link'
 
 export default function Home() {
   const { items, loading, error, fetchItems, createItem, updateItem, deleteItem } = useTestItems()
@@ -76,6 +77,10 @@ export default function Home() {
           ))}
         </div>
       </div>
+
+      <Link href="/lessons/exercise-lesson">
+        <Button className="mt-4">Go to Exercise Lesson</Button>
+      </Link>
 
       <div className="border rounded-lg shadow-sm">
         <ErrorTest />
