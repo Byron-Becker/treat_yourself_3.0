@@ -55,6 +55,7 @@ describe('useLessonCompletion', () => {
     await act(async () => {
       try {
         await result.current.complete()
+        
       } catch (e) {
         // Error is expected
       }

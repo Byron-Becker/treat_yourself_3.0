@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button'
 import { useToast } from '@/hooks/use-toast'
 import { ErrorTest } from '@/components/test/error-test'
 import Link from 'next/link'
-import { UserButton, SignIn } from '@clerk/nextjs'
+import { UserButton } from '@clerk/nextjs'
 
 export default function Home() {
   const { items, loading, error, fetchItems, createItem, updateItem, deleteItem } = useTestItems()
