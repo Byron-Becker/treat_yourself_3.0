@@ -49,7 +49,7 @@ export default function Home() {
           <h1 className="text-2xl font-bold">Test Items</h1>
           <UserButton />
          <button>
-          <Link href="/sign-in">
+          <Link href="/auth/sign-in">
             sign in
           </Link>
          </button>
