@@ -6,7 +6,6 @@ import { useLesson } from '../../hooks/use-lesson'
 import { InfoSlide } from '../components/slides/info-slide'
 import { QuestionSlide } from '../components/slides/question-slide'
 import { InfoBulletSlide } from '../components/slides/info-bullet-slide'
-import { LoadingOverlay } from '../components/loading-overlay'
 import { cn } from '@/components/ui/utils'
 import { memo, useEffect, useRef } from 'react'
 import type { Slide } from '../../types/lesson.types'
@@ -111,7 +110,7 @@ export function LessonContainer({ lessonId }: LessonContainerProps) {
     visibleSlides,
     currentIndex,
     completedSlides,
-    loading,
+    
     interactionState,
     handleAnswer,
     completeSlide,
@@ -121,7 +120,7 @@ export function LessonContainer({ lessonId }: LessonContainerProps) {
     activeSlideId
   } = useLesson(lessonId)
 
-  const { complete, isCompleting } = useLessonCompletion(lessonId)
+  const { complete} = useLessonCompletion(lessonId)
 
   // Handle final slide completion
   const handleFinalSlideCompletion = async (slideId: string) => {
@@ -136,7 +135,7 @@ export function LessonContainer({ lessonId }: LessonContainerProps) {
         } catch (error) {
           // Silently ignore duplicate completion errors
           // Still log other errors
-          if (!error.message?.includes('duplicate key')) {
+          if (error instanceof Error && !error.message?.includes('duplicate key')) {
             console.error('Error completing lesson:', error)
           }
         }
@@ -144,7 +143,7 @@ export function LessonContainer({ lessonId }: LessonContainerProps) {
       
       // Scroll to next slide if available
       setTimeout(() => {
-        scrollToSlide(slideId)
+        scrollToSlide(currentIndex + 1)
       }, 100)
     } catch (error) {
       console.error('Error completing slide:', error)
@@ -186,7 +185,6 @@ export function LessonContainer({ lessonId }: LessonContainerProps) {
       "w-full max-w-2xl mx-auto",
       "space-y-6 py-6"
     )}>
-      {(loading || isCompleting) && <LoadingOverlay />}
 
       {visibleSlides?.map((slide, index) => (
         <SlideWrapper
@@ -198,6 +196,7 @@ export function LessonContainer({ lessonId }: LessonContainerProps) {
           interactionState={interactionState}
           handleAnswer={handleAnswer}
           completeSlide={handleFinalSlideCompletion}
+          // @ts-expect-error - scrollToSlide is not typed
           scrollToSlide={scrollToSlide}
           updateSlidePosition={updateSlidePosition}
         />

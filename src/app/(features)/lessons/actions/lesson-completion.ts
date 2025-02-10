@@ -9,7 +9,7 @@ export async function createCompletion(lessonId: string, token: string | null): 
    return await lessonCompletionService.createCompletion({ lesson_id: lessonId }, token)
  } catch (error) {
    // Silently handle duplicate completions
-   if (error?.code === 'UNIQUE_VIOLATION') {
+   if (error instanceof Error && error.message.includes('UNIQUE_VIOLATION')) {
      return null
    }
    // Rethrow other errors

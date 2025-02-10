@@ -15,7 +15,7 @@ export default function LessonLayout({ children }: LessonLayoutProps) {
      "min-h-[100dvh] flex flex-col",
      "bg-background"
    )}>
-     <LessonHeader className="flex-none sticky top-0 z-50" />
+     <LessonHeader className="flex-none sticky top-0 z-50" progress={0} />
      
      <main className={cn(
        "flex-1 relative",
