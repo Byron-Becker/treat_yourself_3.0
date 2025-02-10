@@ -89,6 +89,10 @@ export default function Home() {
         <Button className="mt-4">Go to Exercise Lesson</Button>
       </Link>
 
+      <Link href="/onboarding">
+        <Button className="mt-4 ml-4">Go to onboarding</Button>
+      </Link>
+
       <div className="border rounded-lg shadow-sm">
         <ErrorTest />
       </div>
