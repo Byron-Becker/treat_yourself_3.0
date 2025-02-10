@@ -7,8 +7,8 @@ import { ONBOARDING_CONTENT } from '../data/onboarding-content'
 
 export function useOnboarding() {
   const router = useRouter()
-  // Create state to force re-render when progress changes
   const [currentIndex, setCurrentIndex] = useState(0)
+  const [selectedOptionId, setSelectedOptionId] = useState<string | null>(null)
   const [progressModel] = useState(() => new OnboardingProgress(ONBOARDING_CONTENT.length))
 
   const handleContinue = useCallback(() => {
@@ -16,19 +16,18 @@ export function useOnboarding() {
       router.push('/auth/sign-up')
       return
     }
-    
-    // Update the progress model and state
     progressModel.advance()
     setCurrentIndex(progressModel.getCurrentIndex())
   }, [progressModel, router])
 
   const handleOptionSelect = useCallback((optionId: string) => {
+    setSelectedOptionId(optionId)
     progressModel.selectOption(optionId)
   }, [progressModel])
 
   return {
-    currentSlide: ONBOARDING_CONTENT[currentIndex], // Use currentIndex instead
-    selectedOptionId: progressModel.getSelectedOption(),
+    currentSlide: ONBOARDING_CONTENT[currentIndex],
+    selectedOptionId,
     handleContinue,
     handleOptionSelect
   }
