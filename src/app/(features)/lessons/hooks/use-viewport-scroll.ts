@@ -11,6 +11,8 @@ interface SlidePosition {
   isActive: boolean;
 }
 
+const HEADER_HEIGHT = 72; // Adjust this value based on the actual height of your fixed header
+
 export function useViewportScroll() {
   const [slidePositions, setSlidePositions] = useState<Map<string, SlidePosition>>(new Map());
   const [activeSlideId, setActiveSlideId] = useState<string | null>(null);
@@ -32,7 +34,7 @@ export function useViewportScroll() {
     if (!targetSlide) return;
 
     const slideRect = targetSlide.getBoundingClientRect();
-    const scrollPosition = slideRect.top + window.scrollY - 20;
+    const scrollPosition = slideRect.top + window.scrollY - HEADER_HEIGHT; // Adjusted for header height
 
     lastScrollPositionRef.current = scrollPosition;
     setLastScrollPosition(scrollPosition);

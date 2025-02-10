@@ -183,7 +183,8 @@ export function LessonContainer({ lessonId }: LessonContainerProps) {
   return (
     <main className={cn(
       "w-full max-w-2xl mx-auto",
-      "space-y-6 py-6"
+      "space-y-6 py-6",
+      "mt-16"
     )}>
 
       {visibleSlides?.map((slide, index) => (
