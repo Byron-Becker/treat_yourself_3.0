@@ -39,7 +39,7 @@ export function SummarySlide() {
     }
 
     fetchExam()
-  }, [getToken])
+  }, [getToken, handleError])
 
   if (isLoading) {
     return (

@@ -123,9 +123,7 @@ export const useExamStore = create<ExamState>()(
               await get().saveProgress(token)
             }
             
-            const exam = await completeExam(get().examId!, token)
-            // Don't reset the store until after navigation
-            return exam
+            await completeExam(get().examId!, token)
           } catch (error) {
             set({ error: error as Error })
             throw error
