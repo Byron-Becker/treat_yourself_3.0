@@ -12,6 +12,7 @@ import { useEffect, useState } from 'react'
 import { ExamAttempt } from '../../types/db.types'
 import { useErrorHandler } from '@/lib/errors/handlers'
 import { useExamStore } from '../../model/exam-state'
+import { ContinueButton } from '../../../shared/components/continue-button'
 
 export function SummarySlide() {
   const router = useRouter()
@@ -119,12 +120,11 @@ export function SummarySlide() {
       </div>
 
       <div className="flex justify-center pt-4">
-        <Button 
+        <ContinueButton 
           onClick={() => router.push('/')}
-          className="bg-green-600 hover:bg-green-700"
-        >
-          Continue to Dashboard
-        </Button>
+          className="bg-cyan-600 hover:bg-cyan-700 dark:bg-cyan-600 dark:hover:bg-cyan-700 dark:text-white"
+          text="Continue to Dashboard"
+        />
       </div>
     </Card>
   )

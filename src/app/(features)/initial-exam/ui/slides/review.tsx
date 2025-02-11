@@ -2,9 +2,10 @@
 
 import { Card } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
-import { Check, ChevronRight } from 'lucide-react'
+import { Check } from 'lucide-react'
 import { examContent } from '../../data/mock-question-content'
 import { ExamAnswers } from '../../types'
+import { ContinueButton } from '../../../shared/components/continue-button'
 
 interface ReviewSlideProps {
   answers: ExamAnswers
@@ -91,13 +92,10 @@ export function ReviewSlide({
       </div>
 
       <div className="flex justify-center pt-4">
-        <Button 
+        <ContinueButton 
           onClick={onSubmit}
-          className="bg-green-600 hover:bg-green-700"
-        >
-          Submit Assessment
-          <ChevronRight className="ml-2 h-4 w-4" />
-        </Button>
+          className="bg-green-600 hover:bg-green-700 dark:bg-green-600 dark:hover:bg-green-700 dark:text-white"
+        />
       </div>
     </Card>
   )

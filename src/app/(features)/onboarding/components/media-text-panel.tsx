@@ -4,7 +4,7 @@
 
 import { motion } from "framer-motion";
 import Image from "next/image";
-import { ContinueButton } from "./continue-button";
+import { ContinueButton } from "@/app/(features)/shared/components/continue-button";
 
 interface MediaTextPanelProps {
   title: string;

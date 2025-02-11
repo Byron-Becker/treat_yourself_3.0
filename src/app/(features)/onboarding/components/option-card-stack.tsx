@@ -4,7 +4,7 @@
 
 import { motion } from "framer-motion";
 import { cn } from '@/components/ui/utils';
-import { ContinueButton } from './continue-button';
+import { ContinueButton } from '@/app/(features)/shared/components/continue-button';
 import type { OptionCard } from '../types/onboarding.types';
 
 interface OptionCardStackProps extends Omit<OptionCard, 'id' | 'type'> {

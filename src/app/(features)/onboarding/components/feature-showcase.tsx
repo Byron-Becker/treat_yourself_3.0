@@ -3,7 +3,7 @@
 
 import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { ContinueButton } from "./continue-button";
+import { ContinueButton } from "@/app/(features)/shared/components/continue-button";
 import Image from 'next/image'
 import type { FeatureShowcase as FeatureShowcaseType } from '../types/onboarding.types';
 
