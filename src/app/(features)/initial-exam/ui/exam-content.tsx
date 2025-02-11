@@ -62,13 +62,13 @@ export default function ExamContent() {
   const handleSubmit = async () => {
     try {
       const token = await getToken({ template: 'supabase' })
-      await submitExam(token)
+      const exam = await submitExam(token)
       toast({
         title: "Assessment completed",
-        description: "Redirecting to dashboard...",
+        description: "Redirecting to summary...",
         variant: "default",
       })
-      router.push('/')
+      router.push(`/initial-exam/summary`)
     } catch (error) {
       handleError(error)
     }

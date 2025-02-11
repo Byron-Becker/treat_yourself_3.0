@@ -111,8 +111,9 @@ export const useExamStore = create<ExamState>()(
               await get().saveProgress(token)
             }
             
-            await completeExam(get().examId!, token)
-            set({ currentStep: 'review' })
+            const exam = await completeExam(get().examId!, token)
+            get().resetExam()
+            return exam
           } catch (error) {
             set({ error: error as Error })
             throw error

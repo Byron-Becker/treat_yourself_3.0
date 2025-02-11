@@ -55,6 +55,21 @@ export class ExamService extends BaseService {
   async completeExam(examId: string, token?: string | null): Promise<ExamAttempt> {
     return this.updateExam(examId, { is_completed: true }, token)
   }
+
+  async getLatestExam(token?: string | null): Promise<ExamAttempt | null> {
+    return this.withErrorHandling(async () => {
+      const client = await this.getClient(token)
+      const { data, error } = await client
+        .from(this.table)
+        .select('*')
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle()
+      
+      if (error) throw error
+      return data
+    })
+  }
 }
 
 export const examService = new ExamService()
