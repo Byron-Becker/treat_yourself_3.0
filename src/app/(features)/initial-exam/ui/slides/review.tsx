@@ -1,0 +1,104 @@
+'use client'
+
+import { Card } from "@/components/ui/card"
+import { Button } from "@/components/ui/button"
+import { Check, ChevronRight } from 'lucide-react'
+import { examContent } from '../../data/mock-question-content'
+import { ExamAnswers } from '../../types'
+
+interface ReviewSlideProps {
+  answers: ExamAnswers
+  onEditSlide: (index: number) => void
+  onSubmit: () => void
+}
+
+export function ReviewSlide({ 
+  answers,
+  onEditSlide,
+  onSubmit 
+}: ReviewSlideProps) {
+  return (
+    <Card className="p-6 space-y-6">
+      <div className="flex items-center space-x-4">
+        <Check className="h-8 w-8 text-green-600" />
+        <h2 className="text-2xl font-bold">Review Your Assessment</h2>
+      </div>
+
+      <div className="space-y-6">
+        {/* Safety Section */}
+        <div className="bg-slate-50 p-4 rounded-lg space-y-4">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="font-semibold text-lg">Safety Screening</h3>
+            <Button 
+              variant="ghost" 
+              size="sm" 
+              onClick={() => onEditSlide(0)}
+              className="text-cyan-600 hover:text-cyan-700"
+            >
+              Edit
+            </Button>
+          </div>
+          {examContent.safety.questions.map((question) => (
+            <div key={question.id} className="mb-4">
+              <div className="flex justify-between">
+                <div className="flex-1 mr-4">
+                  <p>{question.text}</p>
+                  {question.subItems && (
+                    <ul className="list-disc ml-4 mt-2">
+                      {question.subItems.map((item, i) => (
+                        <li key={i} className="text-slate-600">{item}</li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
+                <div className="text-slate-600">{answers.safety[question.id]}</div>
+              </div>
+            </div>
+          ))}
+        </div>
+
+        {/* Treatment Section */}
+        <div className="bg-slate-50 p-4 rounded-lg space-y-4">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="font-semibold text-lg">Treatment Assessment</h3>
+            <Button 
+              variant="ghost" 
+              size="sm" 
+              onClick={() => onEditSlide(1)}
+              className="text-cyan-600 hover:text-cyan-700"
+            >
+              Edit
+            </Button>
+          </div>
+          {examContent.treatment.questions.map((question) => (
+            <div key={question.id} className="mb-4">
+              <div className="flex justify-between">
+                <div className="flex-1 mr-4">
+                  <p>{question.text}</p>
+                </div>
+                <div className="text-slate-600">{answers.treatment[question.id]}</div>
+              </div>
+            </div>
+          ))}
+        </div>
+
+        {/* Risk Warnings */}
+        {Object.values(answers.safety).includes('yes') && (
+          <div className="bg-red-50 text-red-600 p-4 rounded-lg border border-red-100">
+            Based on your answers, we recommend consulting a healthcare provider before proceeding.
+          </div>
+        )}
+      </div>
+
+      <div className="flex justify-center pt-4">
+        <Button 
+          onClick={onSubmit}
+          className="bg-green-600 hover:bg-green-700"
+        >
+          Submit Assessment
+          <ChevronRight className="ml-2 h-4 w-4" />
+        </Button>
+      </div>
+    </Card>
+  )
+}

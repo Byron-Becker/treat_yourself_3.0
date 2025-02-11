@@ -9,6 +9,8 @@ import { useExamStore } from "../model/exam-state"
 import { Button } from "@/components/ui/button"
 import { ChevronRight } from "lucide-react"
 import { examContent } from '../data/mock-question-content'
+import { ReviewSlide } from "./slides/review"
+import { ExamStep } from "../types"
 
 
 
@@ -27,6 +29,9 @@ export default function ExamContent() {
         if (currentStep === 'safety' && isStepComplete('safety')) {
             updateProgress() // Only update progress when continuing
             setCurrentStep('treatment')
+        } else if (currentStep === 'treatment' && isStepComplete('treatment')) {
+            updateProgress()
+            setCurrentStep('review')
         }
     }
 
@@ -53,6 +58,20 @@ export default function ExamContent() {
                             onAnswer={(qId, aId) => setAnswer('treatment', qId, aId)}
                             title={examContent.treatment.title}
                             description={examContent.treatment.description}
+                        />
+                    )}
+
+                    {currentStep === 'review' && (
+                        <ReviewSlide
+                            answers={answers}
+                            onEditSlide={(index) => {
+                                const steps: ExamStep[] = ['safety', 'treatment']
+                                setCurrentStep(steps[index])
+                            }}
+                            onSubmit={() => {
+                                // Handle submission here
+                                console.log('Exam submitted:', answers)
+                            }}
                         />
                     )}
                 </div>

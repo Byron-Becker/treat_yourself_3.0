@@ -1,6 +1,6 @@
 import { create } from 'zustand'
 import { devtools, persist } from 'zustand/middleware'
-import { ExamAnswers, ExamStep } from '../types'
+import { ExamAnswers, ExamStep, ExamAnswerTypes } from '../types'
 import { examContent } from '../data/mock-question-content'
 
 interface ExamState {
@@ -8,7 +8,7 @@ interface ExamState {
   answers: ExamAnswers
   progress: number
   setCurrentStep: (step: ExamStep) => void
-  setAnswer: (step: ExamStep, questionId: string, answerId: string) => void
+  setAnswer: (step: ExamAnswerTypes, questionId: string, answerId: string) => void
   isStepComplete: (step: ExamStep) => boolean
   updateProgress: () => void
   resetExam: () => void
@@ -48,8 +48,9 @@ export const useExamStore = create<ExamState>()(
           ),
 
         isStepComplete: (step) => {
+          if (step === 'review') return true;
           const { answers } = get()
-          const currentAnswers = answers[step]
+          const currentAnswers = answers[step as ExamAnswerTypes] || {};
           return Object.keys(currentAnswers).length > 0
         },
 

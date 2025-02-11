@@ -1,4 +1,4 @@
-export type ExamStep = 'safety' | 'treatment';
+export type ExamStep = 'safety' | 'treatment' | 'review';
 
 export interface SafetyQuestion {
   id: string;
@@ -23,3 +23,5 @@ export interface ExamAnswers {
   safety: Record<string, string>;
   treatment: Record<string, string>;
 }
+
+export type ExamAnswerTypes = 'safety' | 'treatment';
