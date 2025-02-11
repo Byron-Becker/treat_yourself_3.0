@@ -93,6 +93,10 @@ export default function Home() {
         <Button className="mt-4 ml-4">Go to onboarding</Button>
       </Link>
 
+      <Link href="/initial-exam">
+        <Button className="mt-4 ml-4">Go to initial exam</Button>
+      </Link>
+
       <div className="border rounded-lg shadow-sm">
         <ErrorTest />
       </div>
