@@ -16,6 +16,7 @@ interface ExamState {
   isStepComplete: (step: ExamStep) => boolean
   updateProgress: () => void
   resetExam: () => void
+  cleanupExam: () => void
   saveProgress: (token: string | null) => Promise<void>
   submitExam: (token: string | null) => Promise<void>
 }
@@ -85,6 +86,17 @@ export const useExamStore = create<ExamState>()(
           'exam/reset'
         ),
 
+        cleanupExam: () => set(
+          {
+            examId: null,
+            answers: { safety: {}, treatment: {} },
+            progress: 0,
+            error: null
+          },
+          false,
+          'exam/cleanup'
+        ),
+
         saveProgress: async (token: string | null) => {
           try {
             set({ isSubmitting: true, error: null })
@@ -112,7 +124,7 @@ export const useExamStore = create<ExamState>()(
             }
             
             const exam = await completeExam(get().examId!, token)
-            get().resetExam()
+            // Don't reset the store until after navigation
             return exam
           } catch (error) {
             set({ error: error as Error })

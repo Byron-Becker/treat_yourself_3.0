@@ -11,6 +11,7 @@ import { examService } from '../../services/exam.service'
 import { useEffect, useState } from 'react'
 import { ExamAttempt } from '../../types/db.types'
 import { useErrorHandler } from '@/lib/errors/handlers'
+import { useExamStore } from '../../model/exam-state'
 
 export function SummarySlide() {
   const router = useRouter()
@@ -18,6 +19,11 @@ export function SummarySlide() {
   const handleError = useErrorHandler()
   const [exam, setExam] = useState<ExamAttempt | null>(null)
   const [isLoading, setIsLoading] = useState(true)
+
+  useEffect(() => {
+    // Reset the exam store completely when summary mounts
+    useExamStore.getState().resetExam()
+  }, [])
 
   useEffect(() => {
     const fetchExam = async () => {

@@ -12,12 +12,10 @@ import { ChevronRight, Loader2 } from "lucide-react"
 import { useRouter } from 'next/navigation'
 import { examContent } from "../data/mock-question-content"
 import { ExamStep } from '../types'
-import { useToast } from '@/hooks/use-toast'
 import { useErrorHandler } from '@/lib/errors/handlers'
 
 export default function ExamContent() {
   const router = useRouter()
-  const { toast } = useToast()
   const handleError = useErrorHandler()
   const { getToken } = useAuth()
   const { 
@@ -30,7 +28,8 @@ export default function ExamContent() {
     isStepComplete,
     updateProgress,
     saveProgress,
-    submitExam
+    submitExam,
+    cleanupExam
   } = useExamStore()
 
   const handleNext = async () => {
@@ -41,18 +40,10 @@ export default function ExamContent() {
         await saveProgress(token)
         updateProgress()
         setCurrentStep('treatment')
-        toast({
-          title: "Progress saved",
-          description: "Moving to treatment assessment",
-        })
       } else if (currentStep === 'treatment' && isStepComplete('treatment')) {
         await saveProgress(token)
         updateProgress()
         setCurrentStep('review')
-        toast({
-          title: "Progress saved",
-          description: "Review your answers",
-        })
       }
     } catch (error) {
       handleError(error)
@@ -62,13 +53,10 @@ export default function ExamContent() {
   const handleSubmit = async () => {
     try {
       const token = await getToken({ template: 'supabase' })
-      const exam = await submitExam(token)
-      toast({
-        title: "Assessment completed",
-        description: "Redirecting to summary...",
-        variant: "default",
-      })
-      router.push(`/initial-exam/summary`)
+      await submitExam(token)
+      // Clean up the exam data but keep the current step
+      cleanupExam()
+      router.push('/initial-exam/summary')
     } catch (error) {
       handleError(error)
     }
@@ -77,13 +65,7 @@ export default function ExamContent() {
   const handleEditSlide = (index: number) => {
     const steps: ExamStep[] = ['safety', 'treatment']
     setCurrentStep(steps[index])
-    toast({
-      title: "Editing previous section",
-      description: "Your previous answers have been saved",
-    })
   }
-
-  // Rest of the component remains the same...
 
   return (
     <div className="min-h-[100dvh] flex flex-col">
