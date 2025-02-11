@@ -1,3 +1,5 @@
+//  /(features)/initial-exam/ui/exam-content.tsx
+
 'use client'
 
 import { SafetySlide } from "./slides/safety"
@@ -6,30 +8,9 @@ import { ExamHeader } from "./exam-header"
 import { useExamStore } from "../model/exam-state"
 import { Button } from "@/components/ui/button"
 import { ChevronRight } from "lucide-react"
+import { examContent } from '../data/mock-question-content'
 
-// Move to config later
-const MOCK_QUESTIONS = {
-  safety: [
-    {
-      id: 'q1',
-      text: 'Do you have severe pain?',
-      options: [
-        { id: 'yes', text: 'Yes' },
-        { id: 'no', text: 'No' }
-      ]
-    }
-  ],
-  treatment: [
-    {
-      id: 'q1',
-      text: 'How often do you experience pain?',
-      options: [
-        { id: 'daily', text: 'Daily' },
-        { id: 'weekly', text: 'Weekly' }
-      ]
-    }
-  ]
-}
+
 
 export default function ExamContent() {
   const { 
@@ -57,7 +38,7 @@ export default function ExamContent() {
         <div className="max-w-2xl mx-auto space-y-6">
           {currentStep === 'safety' && (
             <SafetySlide
-              questions={MOCK_QUESTIONS.safety}
+              questions={examContent.safety.questions}
               answers={answers.safety}
               onAnswer={(qId, aId) => setAnswer('safety', qId, aId)}
             />
@@ -65,7 +46,7 @@ export default function ExamContent() {
 
           {currentStep === 'treatment' && (
             <TreatmentSlide
-              questions={MOCK_QUESTIONS.treatment}
+              questions={examContent.treatment.questions}
               answers={answers.treatment}
               onAnswer={(qId, aId) => setAnswer('treatment', qId, aId)}
             />

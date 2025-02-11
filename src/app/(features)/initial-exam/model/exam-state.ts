@@ -1,8 +1,7 @@
-
-
 import { create } from 'zustand'
 import { devtools, persist } from 'zustand/middleware'
 import { ExamAnswers, ExamStep } from '../types'
+import { examContent } from '../data/mock-question-content'
 
 interface ExamState {
   currentStep: ExamStep
@@ -12,30 +11,8 @@ interface ExamState {
   setAnswer: (step: ExamStep, questionId: string, answerId: string) => void
   isStepComplete: (step: ExamStep) => boolean
   updateProgress: () => void
+  resetExam: () => void
 }
-
-const MOCK_QUESTIONS = {
-    safety: [
-      {
-        id: 'q1',
-        text: 'Do you have severe pain?',
-        options: [
-          { id: 'yes', text: 'Yes' },
-          { id: 'no', text: 'No' }
-        ]
-      }
-    ],
-    treatment: [
-      {
-        id: 'q1',
-        text: 'How often do you experience pain?',
-        options: [
-          { id: 'daily', text: 'Daily' },
-          { id: 'weekly', text: 'Weekly' }
-        ]
-      }
-    ]
-  }
 
 export const useExamStore = create<ExamState>()(
   devtools(
@@ -78,14 +55,29 @@ export const useExamStore = create<ExamState>()(
 
         updateProgress: () => {
           const { answers } = get()
-          const totalQuestions = MOCK_QUESTIONS.safety.length + MOCK_QUESTIONS.treatment.length
+          const totalQuestions = examContent.safety.questions.length + examContent.treatment.questions.length
           const answeredQuestions = Object.keys(answers.safety).length + Object.keys(answers.treatment).length
           const progress = Math.round((answeredQuestions / totalQuestions) * 100)
           set({ progress }, false, 'exam/updateProgress')
-        }
+        },
+
+        resetExam: () => set(
+          {
+            currentStep: 'safety',
+            answers: { safety: {}, treatment: {} },
+            progress: 0
+          },
+          false,
+          'exam/reset'
+        )
       }),
       {
-        name: 'exam-storage'
+        name: 'exam-storage',
+        partialize: (state) => ({
+          answers: state.answers,
+          currentStep: state.currentStep,
+          progress: state.progress
+        })
       }
     )
   )
