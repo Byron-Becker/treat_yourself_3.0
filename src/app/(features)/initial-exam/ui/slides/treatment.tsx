@@ -6,23 +6,31 @@ import { TreatmentQuestion } from "../../types"
 import { Clipboard } from "lucide-react"
 
 interface TreatmentSlideProps {
-  questions: TreatmentQuestion[]
-  answers: Record<string, string>
-  onAnswer: (questionId: string, answerId: string) => void
-}
-
-export function TreatmentSlide({ questions, answers, onAnswer }: TreatmentSlideProps) {
-  return (
-    <Card className="p-6 space-y-6">
-      <div className="flex items-center space-x-4">
-        <Clipboard className="h-8 w-8 text-primary" />
-        <div>
-          <h2 className="text-2xl font-bold">Treatment Assessment</h2>
-          <p className="text-muted-foreground">
-            Please answer these questions about your symptoms.
-          </p>
+    questions: TreatmentQuestion[]
+    answers: Record<string, string>
+    onAnswer: (questionId: string, answerId: string) => void
+    title: string
+    description: string
+  }
+  
+  export function TreatmentSlide({ 
+    questions, 
+    answers, 
+    onAnswer,
+    title,
+    description
+  }: TreatmentSlideProps) {
+    return (
+      <Card className="p-6 space-y-6">
+        <div className="flex items-center space-x-4">
+          <Clipboard className="h-8 w-8 text-primary" />
+          <div>
+            <h2 className="text-2xl font-bold">{title}</h2>
+            <p className="text-muted-foreground">
+              {description}
+            </p>
+          </div>
         </div>
-      </div>
 
       <div className="space-y-4">
         {questions.map((question) => (

@@ -5,25 +5,33 @@ import { Button } from "@/components/ui/button"
 import { SafetyQuestion } from "../../types"
 import { Shield } from "lucide-react"
 
+// src/(features)/initial-exam/ui/slides/safety.tsx
 interface SafetySlideProps {
-  questions: SafetyQuestion[]
-  answers: Record<string, string>
-  onAnswer: (questionId: string, answerId: string) => void
-}
-
-export function SafetySlide({ questions, answers, onAnswer }: SafetySlideProps) {
-  return (
-    <Card className="p-6 space-y-6">
-      <div className="flex items-center space-x-4">
-        <Shield className="h-8 w-8 text-primary" />
-        <div>
-          <h2 className="text-2xl font-bold">Safety Screening</h2>
-          <p className="text-muted-foreground">
-            Please answer these safety questions before proceeding.
-          </p>
+    questions: SafetyQuestion[]
+    answers: Record<string, string>
+    onAnswer: (questionId: string, answerId: string) => void
+    title: string
+    description: string
+  }
+  
+  export function SafetySlide({ 
+    questions, 
+    answers, 
+    onAnswer,
+    title,
+    description 
+  }: SafetySlideProps) {
+    return (
+      <Card className="p-6 space-y-6">
+        <div className="flex items-center space-x-4">
+          <Shield className="h-8 w-8 text-primary" />
+          <div>
+            <h2 className="text-2xl font-bold">{title}</h2>
+            <p className="text-muted-foreground">
+              {description}
+            </p>
+          </div>
         </div>
-      </div>
-
       <div className="space-y-4">
         {questions.map((question) => (
           <div key={question.id} className="space-y-2">
