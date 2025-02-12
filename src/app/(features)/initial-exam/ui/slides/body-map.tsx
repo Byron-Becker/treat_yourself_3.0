@@ -1,7 +1,7 @@
 // components/slides/body-map-slide.tsx
 'use client'
 
-import { forwardRef } from 'react'
+import { forwardRef, useState } from 'react'
 import { MapPin } from 'lucide-react'
 import { Card } from "@/components/ui/card"
 import { BodyPartId } from '@/app/(features)/shared/components/body-map/shared-types'
@@ -14,9 +14,16 @@ interface BodyMapSlideProps {
 
 export const BodyMapSlide = forwardRef<HTMLDivElement, BodyMapSlideProps>(
   function BodyMapSlide({ selectedParts, onPartSelect }, ref) {
+    const [totalScore, setTotalScore] = useState(0)
+    
     const selectedLocations = Object.entries(selectedParts)
-      .filter(([_, selected]) => selected)
+      .filter(([selected]) => selected)
       .map(([partId]) => partId as BodyPartId)
+
+    const handlePartSelect = (partId: string, selected: boolean, score: number) => {
+      onPartSelect(partId, selected)
+      setTotalScore(prev => selected ? prev + score : prev - score)
+    }
 
     return (
       <div ref={ref} className="space-y-4">
@@ -26,6 +33,11 @@ export const BodyMapSlide = forwardRef<HTMLDivElement, BodyMapSlideProps>(
               <MapPin size={32} className="text-cyan-600" />
               <h2 className="text-2xl font-bold text-slate-800">Pain Location</h2>
             </div>
+            {totalScore > 0 && (
+              <div className="text-sm text-slate-600">
+                Pain Score: {totalScore}
+              </div>
+            )}
           </div>
           
           <p className="text-slate-600">
@@ -34,7 +46,7 @@ export const BodyMapSlide = forwardRef<HTMLDivElement, BodyMapSlideProps>(
 
           <BaseMap
             selectedLocations={selectedLocations}
-            onSelect={(partId) => onPartSelect(partId, !selectedParts[partId])}
+            onSelect={handlePartSelect}
           />
         </Card>
       </div>
