@@ -25,4 +25,4 @@ export interface ExamAnswers {
   treatment: Record<string, string>;
 }
 
-export type ExamAnswerTypes = 'bodyMap' | 'safety' | 'treatment';
+export type ExamAnswerTypes = keyof ExamAnswers;

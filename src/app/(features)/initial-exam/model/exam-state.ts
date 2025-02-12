@@ -72,17 +72,48 @@ export const useExamStore = create<ExamState>()(
           ),
 
         isStepComplete: (step) => {
-          if (step === 'review') return true;
-          const { answers } = get()
-          if (!answers) return false;
+          console.log('isStepComplete called for step:', step);
           
-          const currentAnswers = answers[step as ExamAnswerTypes]
-          if (!currentAnswers) return false;
+          if (step === 'review') {
+            console.log('Review step - always complete');
+            return true;
+          }
+          
+          const { answers } = get()
+          console.log('Current answers:', answers);
+          
+          if (!answers) {
+            console.log('No answers object found');
+            return false;
+          }
+
+          // Convert body-map to bodyMap for accessing the answers object
+          const answerKey = step === 'body-map' ? 'bodyMap' : step;
+          const currentAnswers = answers[answerKey as ExamAnswerTypes];
+          console.log('Current step answers:', currentAnswers);
+          
+          if (!currentAnswers) {
+            console.log('No answers for current step');
+            return false;
+          }
 
           if (step === 'body-map') {
-            return Object.values(currentAnswers).some(selected => selected === true)
+            console.log('Checking body map completion');
+            console.log('Body map answers:', currentAnswers);
+            // Check if any body part is selected (true)
+            const selectedParts = Object.entries(currentAnswers)
+              .filter(([_, selected]) => selected === true);
+            console.log('Selected parts:', selectedParts);
+            const isComplete = selectedParts.length > 0;
+            console.log('Body map complete?', isComplete);
+            return isComplete;
           }
-          return Object.keys(currentAnswers).length > 0
+          
+          const numAnswers = Object.keys(currentAnswers).length;
+          console.log(`Number of answers for ${step}:`, numAnswers);
+          const isComplete = numAnswers > 0;
+          console.log(`${step} complete?`, isComplete);
+          return isComplete;
         },
 
         updateProgress: () => {
@@ -166,12 +197,14 @@ export const useExamStore = create<ExamState>()(
           if (!state) return;
           
           // Ensure answers object exists with all required properties
-          state.answers = {
-            bodyMap: {},
-            safety: {},
-            treatment: {},
-            ...state.answers
-          };
+          if (!state.answers) {
+            state.answers = { bodyMap: {}, safety: {}, treatment: {} };
+          } else {
+            // Ensure each section exists
+            if (!state.answers.bodyMap) state.answers.bodyMap = {};
+            if (!state.answers.safety) state.answers.safety = {};
+            if (!state.answers.treatment) state.answers.treatment = {};
+          }
         }
       }
     )
