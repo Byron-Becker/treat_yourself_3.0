@@ -102,7 +102,7 @@ export const useExamStore = create<ExamState>()(
             console.log('Body map answers:', currentAnswers);
             // Check if any body part is selected (true)
             const selectedParts = Object.entries(currentAnswers)
-              .filter(([_, selected]) => selected === true);
+              .filter(([, selected]) => selected === true);
             console.log('Selected parts:', selectedParts);
             const isComplete = selectedParts.length > 0;
             console.log('Body map complete?', isComplete);
