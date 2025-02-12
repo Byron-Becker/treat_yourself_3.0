@@ -45,474 +45,2203 @@ Additional Info:
 ================================================================
 Directory Structure
 ================================================================
-api/actions.ts
-data/mock-question-content.ts
-layout.tsx
-model/exam-state.ts
-page.tsx
-services/exam.service.ts
-summary/page.tsx
+[lessonId]/components/__tests__/lesson-container.integration.test.tsx
+[lessonId]/components/image-error-boundary.tsx
+[lessonId]/components/lesson-container.tsx
+[lessonId]/components/lesson-header.tsx
+[lessonId]/components/loading-overlay.tsx
+[lessonId]/components/slides/info-bullet-slide.tsx
+[lessonId]/components/slides/info-slide.tsx
+[lessonId]/components/slides/question-slide.tsx
+[lessonId]/layout.tsx
+[lessonId]/page.tsx
+actions/lesson-completion.ts
+data/exercise-content.ts
+data/posture-content.ts
+hooks/__tests__/use-lesson-completion.test.ts
+hooks/use-lesson-completion.ts
+hooks/use-lesson-progress.ts
+hooks/use-lesson.ts
+hooks/use-slide-interaction.ts
+hooks/use-viewport-scroll.ts
+model/__tests__/lesson-progress.test.ts
+model/__tests__/slide-interaction.test.ts
+model/__tests__/viewport-state.test.ts
+model/lesson-progress.ts
+model/slide-interaction.ts
+model/viewport-state.ts
+services/__tests__/lesson-completion.service.test.ts
+services/__tests__/use-lesson-completion.test.ts
+services/lesson-completion.service.ts
+services/lesson.service.ts
 types/db.types.ts
-types/index.ts
-ui/exam-container.tsx
-ui/exam-content.tsx
-ui/exam-header.tsx
-ui/slides/body-map.tsx
-ui/slides/review.tsx
-ui/slides/safety.tsx
-ui/slides/summary.tsx
-ui/slides/treatment.tsx
+types/lesson.types.ts
 
 ================================================================
 Files
 ================================================================
 
 ================
-File: api/actions.ts
+File: [lessonId]/components/__tests__/lesson-container.integration.test.tsx
 ================
-'use server'
+// features/lessons/components/__tests__/lesson-container.integration.test.tsx
 
-import { examService } from '../services/exam.service'
-import { ExamAnswers } from '../types'
-import { NotFoundError } from '@/lib/errors/base'
-import { frontBodyParts, backBodyParts } from '@/app/(features)/shared/components/body-map/body-part'
+import { render, screen, fireEvent, waitFor } from '@testing-library/react'
+import { LessonContainer } from '../lesson-container'
+import { useLesson } from '../../../hooks/use-lesson'
+import { useLessonCompletion } from '../../../hooks/use-lesson-completion'
 
-function calculateTotalScore(selections: Record<string, boolean>): number {
-  const allBodyParts = [...frontBodyParts, ...backBodyParts]
-  return Object.entries(selections)
-    .filter(([selected]) => selected)
-    .reduce((total, [partId]) => {
-      const part = allBodyParts.find(p => p.id === partId)
-      return total + (part?.score || 0)
-    }, 0)
-}
 
-export async function saveExamAnswers(
-  answers: ExamAnswers,
-  token: string | null
-) {
-  try {
-    // Calculate body map score
-    const score = calculateTotalScore(answers.bodyMap)
+jest.mock('../../../hooks/use-lesson')
+jest.mock('../../../hooks/use-lesson-completion')
 
-    // First save body map with score
-    const bodyMapId = await examService.createBodyMapSelection(
-      answers.bodyMap,
-      score,
-      token
-    )
 
-    // Then create exam with all data at once
-    return await examService.createExam({
-      safety_answers: answers.safety,
-      treatment_answers: answers.treatment,
-      body_map_id: bodyMapId,
-      is_completed: true, // Set to true since this is the final submission
-      user_id: '', // Will be set by service from JWT
-    }, token)
-  } catch (error) {
-    console.error('Error saving exam answers:', error)
-    throw error
-  }
-}
+describe('LessonContainer Integration', () => {
+  const mockLessonId = 'lesson-1'
+  const mockSlides = [
+    { id: 'slide-1', type: 'info', title: 'First Slide', body: 'Content 1' },
+    { id: 'slide-2', type: 'info', title: 'Last Slide', body: 'Content 2' }
+  ]
 
-// Remove updateExamAnswers since we don't want partial saves
+  beforeEach(() => {
+    jest.clearAllMocks()
+    
+    // Mock useLesson default state
+    ;(useLesson as jest.Mock).mockReturnValue({
+      lesson: { id: mockLessonId, slides: mockSlides },
+      visibleSlides: mockSlides,
+      currentIndex: 0,
+      completedSlides: new Set(),
+      loading: false,
+      completeSlide: jest.fn(),
+      scrollToSlide: jest.fn(),
+      updateSlidePosition: jest.fn()
+    })
 
-export async function completeExam(
-  examId: string,
-  token: string | null
-) {
-  try {
-    const exam = await examService.getExam(examId, token)
-    if (!exam) {
-      throw new NotFoundError('Exam not found')
-    }
+    // Mock useLessonCompletion default state
+    ;(useLessonCompletion as jest.Mock).mockReturnValue({
+      complete: jest.fn(),
+      isCompleting: false,
+      error: null
+    })
+  })
 
-    return await examService.completeExam(examId, token)
-  } catch (error) {
-    console.error('Error completing exam:', error)
-    throw error
-  }
-}
+  it('should complete lesson when all slides are finished', async () => {
+    const mockComplete = jest.fn()
+    const mockCompleteSlide = jest.fn()
 
-================
-File: data/mock-question-content.ts
-================
-export const examContent = {
-    safety: {
-      title: "Safety Screening",
-      description: "Please answer these safety questions to ensure this program is right for you.",
-      questions: [
-        {
-          id: 'severe-leg-pain',
-          text: 'Do you have ALL of the following:',
-          subItems: [
-            'Severe leg pain below the knee',
-            'Weakness, numbness, or pins and needles in foot/toes'
-          ],
-          options: [
-            { id: 'yes', text: 'Yes' },
-            { id: 'no', text: 'No' }
-          ]
-        },
-        {
-          id: 'recent-accident',
-          text: 'Have you developed low back problems following a recent severe accident?',
-          options: [
-            { id: 'yes', text: 'Yes' },
-            { id: 'no', text: 'No' }
-          ]
-        },
-        {
-          id: 'bladder-issues',
-          text: 'Have you developed any bladder problems following a recent severe episode of low back pain?',
-          options: [
-            { id: 'yes', text: 'Yes' },
-            { id: 'no', text: 'No' }
-          ]
-        }
-      ]
-    },
-    treatment: {
-      title: "Treatment Assessment",
-      description: "Please answer the following questions about your condition.",
-      questions: [
-        {
-          id: 'pain-free-periods',
-          text: 'Are there periods in the day when you have no pain? Even ten minutes?',
-          options: [
-            { id: 'yes', text: 'Yes' },
-            { id: 'no', text: 'No' }
-          ]
-        },
-        {
-          id: 'pain-above-knee',
-          text: 'Is the pain confined to areas above the knee?',
-          options: [
-            { id: 'yes', text: 'Yes' },
-            { id: 'no', text: 'No' }
-          ]
-        },
-        {
-          id: 'worse-sitting',
-          text: 'Are you generally worse when sitting for prolonged periods or on rising from the sitting position?',
-          options: [
-            { id: 'yes', text: 'Yes' },
-            { id: 'no', text: 'No' }
-          ]
-        }
-      ]
-    }
-  }
+    ;(useLessonCompletion as jest.Mock).mockReturnValue({
+      complete: mockComplete,
+      isCompleting: false
+    })
+
+    ;(useLesson as jest.Mock).mockReturnValue({
+      lesson: { id: mockLessonId, slides: mockSlides },
+      visibleSlides: mockSlides,
+      currentIndex: mockSlides.length - 1,
+      completedSlides: new Set([mockSlides[0].id]),
+      loading: false,
+      completeSlide: mockCompleteSlide,
+      scrollToSlide: jest.fn(),
+      updateSlidePosition: jest.fn()
+    })
+
+    render(<LessonContainer lessonId={mockLessonId} />)
+
+    // Click continue on last slide
+    const continueButton = screen.getByText('Continue')
+    fireEvent.click(continueButton)
+
+    await waitFor(() => {
+      expect(mockCompleteSlide).toHaveBeenCalledWith(mockSlides[1].id)
+      expect(mockComplete).toHaveBeenCalled()
+    })
+  })
+
+  it('should show loading state when completing lesson', async () => {
+    ;(useLessonCompletion as jest.Mock).mockReturnValue({
+      complete: jest.fn(),
+      isCompleting: true
+    })
+
+    render(<LessonContainer lessonId={mockLessonId} />)
+    expect(screen.getByText('Loading...')).toBeInTheDocument()
+  })
+
+  it('should handle slide progression correctly', async () => {
+    const mockScrollToSlide = jest.fn()
+    
+    // Show only first slide
+    ;(useLesson as jest.Mock).mockReturnValue({
+      lesson: { id: mockLessonId, slides: mockSlides },
+      visibleSlides: [mockSlides[0]], // Only show first slide
+      currentIndex: 0,
+      completedSlides: new Set(),
+      loading: false,
+      completeSlide: jest.fn(),
+      scrollToSlide: mockScrollToSlide,
+      updateSlidePosition: jest.fn()
+    })
+
+    render(<LessonContainer lessonId={mockLessonId} />)
+
+    const continueButton = screen.getByText('Continue')
+    fireEvent.click(continueButton)
+
+    await waitFor(() => {
+      expect(mockScrollToSlide).toHaveBeenCalledWith(mockSlides[0].id)
+    })
+  })
+//   it('should handle errors during lesson completion', async () => {
+//     const mockError = new Error('Failed to complete lesson')
+//     const mockComplete = jest.fn().mockRejectedValue(mockError)
+  
+//     ;(useLessonCompletion as jest.Mock).mockReturnValue({
+//       complete: mockComplete,
+//       isCompleting: false,
+//       error: mockError
+//     })
+  
+//     render(<LessonContainer lessonId={mockLessonId} />)
+  
+//     const continueButton = screen.getByText('Continue')
+//     fireEvent.click(continueButton)
+  
+//     await waitFor(() => {
+//       expect(mockComplete).toHaveBeenCalled()
+//     })
+//   })
+})
 
 ================
-File: layout.tsx
+File: [lessonId]/components/image-error-boundary.tsx
 ================
+// app/lessons/[lessonId]/components/image-error-boundary.tsx
+
 'use client'
 
-import { ReactNode } from 'react'
-import { UserButton } from '@clerk/nextjs'
+import React from 'react'
+import { ImageOff } from 'lucide-react'
+import { Button } from '@/components/ui/button'
 
-export default function ExamLayout({ children }: { children: ReactNode }) {
+interface Props {
+  children: React.ReactNode
+}
+
+interface State {
+  hasError: boolean
+}
+
+export class ImageErrorBoundary extends React.Component<Props, State> {
+  constructor(props: Props) {
+    super(props)
+    this.state = { hasError: false }
+  }
+
+  static getDerivedStateFromError() {
+    return { hasError: true }
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div className="w-full h-full flex flex-col items-center justify-center gap-4 bg-muted rounded-lg p-8">
+          <ImageOff className="h-12 w-12 text-muted-foreground" />
+          <p className="text-sm text-muted-foreground">Failed to load image</p>
+          <Button 
+            variant="outline" 
+            size="sm"
+            onClick={() => this.setState({ hasError: false })}
+          >
+            Retry
+          </Button>
+        </div>
+      )
+    }
+
+    return this.props.children
+  }
+}
+
+================
+File: [lessonId]/components/lesson-container.tsx
+================
+// app/lessons/[lessonId]/components/lesson-container.tsx
+
+'use client'
+
+import { useLesson } from '../../hooks/use-lesson'
+import { InfoSlide } from '../components/slides/info-slide'
+import { QuestionSlide } from '../components/slides/question-slide'
+import { InfoBulletSlide } from '../components/slides/info-bullet-slide'
+import { cn } from '@/components/ui/utils'
+import { memo, useEffect, useRef } from 'react'
+import type { Slide } from '../../types/lesson.types'
+import { useLessonCompletion } from '../../hooks/use-lesson-completion'
+
+interface LessonContainerProps {
+  lessonId: string
+}
+
+interface SlideWrapperProps {
+  slide: Slide
+  index: number
+  currentIndex: number
+  completedSlides: Set<string>
+  interactionState: string
+  handleAnswer: (optionId: string, correctOptionId: string) => void
+  completeSlide: (slideId: string) => void
+  scrollToSlide: (slideId: string) => void
+  updateSlidePosition: (slideId: string, bounds: { top: number; bottom: number }) => void
+}
+
+const SlideWrapper = memo(function SlideWrapper({ 
+  slide, 
+  index,
+  currentIndex,
+  completedSlides,
+  interactionState,
+  handleAnswer,
+  completeSlide,
+  scrollToSlide,
+  updateSlidePosition 
+}: SlideWrapperProps) {
+  const prevBoundsRef = useRef<{ top: number; bottom: number } | null>(null);
+
   return (
-    <div className="min-h-screen bg-slate-50">
-      <div className="absolute top-5 right-4 z-50">
-        <UserButton />
-      </div>
-      {children}
+    <div 
+      className="slide-item"
+      ref={el => {
+        if (el) {
+          const bounds = el.getBoundingClientRect();
+          const prevBounds = prevBoundsRef.current;
+          if (!prevBounds || prevBounds.top !== bounds.top || prevBounds.bottom !== bounds.bottom) {
+            updateSlidePosition(slide.id, {
+              top: bounds.top,
+              bottom: bounds.bottom
+            });
+            prevBoundsRef.current = bounds;
+          }
+        }
+      }}
+    >
+      {slide.type === 'info' && (
+        <InfoSlide
+          content={slide}
+          isActive={index === currentIndex}
+          isCompleted={completedSlides.has(slide.id)}
+          onComplete={() => {
+            completeSlide(slide.id)
+            setTimeout(() => {
+              scrollToSlide(slide.id);
+            }, 100);
+          }}
+        />
+      )}
+
+      {slide.type === 'question' && (
+        <QuestionSlide
+          content={slide}
+          isActive={index === currentIndex}
+          isCompleted={completedSlides.has(slide.id)}
+          interactionState={interactionState}
+          onAnswer={handleAnswer}
+          onComplete={() => {
+            completeSlide(slide.id)
+            setTimeout(() => {
+              scrollToSlide(slide.id);
+            }, 100);
+          }}
+        />
+      )}
+
+      {slide.type === 'infoBullet' && (
+        <InfoBulletSlide
+          content={slide}
+          isActive={index === currentIndex}
+          isCompleted={completedSlides.has(slide.id)}
+          onComplete={() => {
+            completeSlide(slide.id)
+            setTimeout(() => {
+              scrollToSlide(slide.id);
+            }, 100);
+          }}
+        />
+      )}
     </div>
   )
-}
+})
 
-================
-File: model/exam-state.ts
-================
-// src/(features)/initial-exam/model/exam-state.ts
-import { create } from 'zustand'
-import { devtools, persist } from 'zustand/middleware'
-import { ExamAnswers, ExamStep, ExamAnswerTypes } from '../types'
-import { saveExamAnswers } from '../api/actions'
+export function LessonContainer({ lessonId }: LessonContainerProps) {
+  const {
+    lesson,
+    visibleSlides,
+    currentIndex,
+    completedSlides,
+    
+    interactionState,
+    handleAnswer,
+    completeSlide,
+    scrollToSlide,
+    updateSlidePosition,
+    lastScrollPosition,
+    activeSlideId
+  } = useLesson(lessonId)
 
-interface ExamState {
-  examId: string | null
-  currentStep: ExamStep
-  answers: ExamAnswers
-  progress: number
-  isSubmitting: boolean
-  error: Error | null
-  setCurrentStep: (step: ExamStep) => void
-  setAnswer: (step: ExamAnswerTypes, questionId: string, answerId: string | boolean) => void
-  isStepComplete: (step: ExamStep) => boolean
-  updateProgress: () => void
-  resetExam: () => void
-  cleanupExam: () => void
-  saveProgress: (token: string | null) => Promise<void>
-  submitExam: (token: string | null) => Promise<void>
-}
+  const { complete} = useLessonCompletion(lessonId)
 
-export const useExamStore = create<ExamState>()(
-  devtools(
-    persist(
-      (set, get) => ({
-        examId: null,
-        currentStep: 'body-map',
-        progress: 0,
-        answers: {
-          bodyMap: {},
-          safety: {},
-          treatment: {}
-        },
-        isSubmitting: false,
-        error: null,
-        
-        setCurrentStep: (step) => 
-          set(
-            { currentStep: step },
-            false,
-            'exam/setCurrentStep'
-          ),
-        
-        setAnswer: (step, questionId, answerId) => 
-          set(
-            (state) => {
-              if (!state.answers) {
-                return {
-                  answers: {
-                    bodyMap: {},
-                    safety: {},
-                    treatment: {},
-                    [step]: { [questionId]: answerId }
-                  }
-                }
-              }
-
-              return {
-                answers: {
-                  ...state.answers,
-                  [step]: {
-                    ...(state.answers[step] || {}),
-                    [questionId]: answerId
-                  }
-                }
-              }
-            },
-            false,
-            'exam/setAnswer'
-          ),
-
-        isStepComplete: (step) => {
-          console.log('isStepComplete called for step:', step);
-          
-          if (step === 'review') {
-            console.log('Review step - always complete');
-            return true;
-          }
-          
-          const { answers } = get()
-          console.log('Current answers:', answers);
-          
-          if (!answers) {
-            console.log('No answers object found');
-            return false;
-          }
-
-          // Convert body-map to bodyMap for accessing the answers object
-          const answerKey = step === 'body-map' ? 'bodyMap' : step;
-          const currentAnswers = answers[answerKey as ExamAnswerTypes];
-          console.log('Current step answers:', currentAnswers);
-          
-          if (!currentAnswers) {
-            console.log('No answers for current step');
-            return false;
-          }
-
-          if (step === 'body-map') {
-            console.log('Checking body map completion');
-            console.log('Body map answers:', currentAnswers);
-            // Check if any body part is selected (true)
-            const selectedParts = Object.entries(currentAnswers)
-              .filter(([, selected]) => selected === true);
-            console.log('Selected parts:', selectedParts);
-            const isComplete = selectedParts.length > 0;
-            console.log('Body map complete?', isComplete);
-            return isComplete;
-          }
-          
-          const numAnswers = Object.keys(currentAnswers).length;
-          console.log(`Number of answers for ${step}:`, numAnswers);
-          const isComplete = numAnswers > 0;
-          console.log(`${step} complete?`, isComplete);
-          return isComplete;
-        },
-
-        updateProgress: () => {
-          const { answers } = get()
-          const totalQuestions = 7
-          const answeredQuestions = 
-            (Object.values(answers.bodyMap).some(selected => selected === true) ? 1 : 0) +
-            Object.keys(answers.safety).length + 
-            Object.keys(answers.treatment).length
-          const progress = Math.round((answeredQuestions / totalQuestions) * 100)
-          set({ progress }, false, 'exam/updateProgress')
-        },
-
-        resetExam: () => set(
-          {
-            examId: null,
-            currentStep: 'body-map',
-            answers: { bodyMap: {}, safety: {}, treatment: {} },
-            progress: 0,
-            error: null
-          },
-          false,
-          'exam/reset'
-        ),
-
-        cleanupExam: () => set(
-          {
-            examId: null,
-            answers: { bodyMap: {}, safety: {}, treatment: {} },
-            progress: 0,
-            error: null
-          },
-          false,
-          'exam/cleanup'
-        ),
-
-        saveProgress: async () => {
-          try {
-            set({ isSubmitting: true, error: null })
-            // Store answers in state but don't save to database yet
-            set({ error: null })
-          } catch (error) {
-            set({ error: error as Error })
-            throw error
-          } finally {
-            set({ isSubmitting: false })
-          }
-        },
-
-        submitExam: async (token: string | null) => {
-          try {
-            set({ isSubmitting: true, error: null })
-            const { answers } = get()
-            
-            // Save everything at once when submitting
-            const result = await saveExamAnswers(answers, token)
-            set({ examId: result.id })
-          } catch (error) {
-            set({ error: error as Error })
-            throw error
-          } finally {
-            set({ isSubmitting: false })
-          }
-        }
-      }),
-      {
-        name: 'exam-storage',
-        partialize: (state) => ({
-          examId: state.examId,
-          answers: state.answers || { bodyMap: {}, safety: {}, treatment: {} },
-          currentStep: state.currentStep || 'body-map',
-          progress: state.progress || 0
-        }),
-        onRehydrateStorage: () => (state) => {
-          if (!state) return;
-          
-          // Ensure answers object exists with all required properties
-          if (!state.answers) {
-            state.answers = { bodyMap: {}, safety: {}, treatment: {} };
-          } else {
-            // Ensure each section exists
-            if (!state.answers.bodyMap) state.answers.bodyMap = {};
-            if (!state.answers.safety) state.answers.safety = {};
-            if (!state.answers.treatment) state.answers.treatment = {};
+  // Handle final slide completion
+  const handleFinalSlideCompletion = async (slideId: string) => {
+    try {
+      // Complete the slide first
+      completeSlide(slideId)
+      
+      // If this was the last slide, attempt to mark as complete
+      if (currentIndex === visibleSlides.length - 1) {
+        try {
+          await complete()
+        } catch (error) {
+          // Silently ignore duplicate completion errors
+          // Still log other errors
+          if (error instanceof Error && !error.message?.includes('duplicate key')) {
+            console.error('Error completing lesson:', error)
           }
         }
       }
-    )
+      
+      // Scroll to next slide if available
+      setTimeout(() => {
+        scrollToSlide(currentIndex + 1)
+      }, 100)
+    } catch (error) {
+      console.error('Error completing slide:', error)
+    }
+  }
+
+  useEffect(() => {
+    
+  }, [lesson]);
+
+  useEffect(() => {
+    
+  }, [visibleSlides]);
+
+  useEffect(() => {
+    
+  }, [currentIndex]);
+
+  useEffect(() => {
+    
+  }, [completedSlides]);
+
+  useEffect(() => {
+    
+  }, [interactionState]);
+
+  useEffect(() => {
+    
+  }, [activeSlideId]);
+
+  useEffect(() => {
+    
+  }, [lastScrollPosition]);
+
+  if (!lesson) return null
+
+  return (
+    <main className={cn(
+      "w-full max-w-2xl mx-auto",
+      "space-y-6 py-6",
+      "mt-16"
+    )}>
+
+      {visibleSlides?.map((slide, index) => (
+        <SlideWrapper
+          key={slide.id}
+          slide={slide}
+          index={index}
+          currentIndex={currentIndex}
+          completedSlides={completedSlides}
+          interactionState={interactionState}
+          handleAnswer={handleAnswer}
+          completeSlide={handleFinalSlideCompletion}
+          // @ts-expect-error - scrollToSlide is not typed
+          scrollToSlide={scrollToSlide}
+          updateSlidePosition={updateSlidePosition}
+        />
+      ))}
+    </main>
   )
-)
-
-================
-File: page.tsx
-================
-import { ExamContainer } from './ui/exam-container'
-
-export default function ExamPage() {
-  return <ExamContainer />
 }
 
 ================
-File: services/exam.service.ts
+File: [lessonId]/components/lesson-header.tsx
 ================
+// app/lessons/[lessonId]/components/lesson-header.tsx
+
+'use client'
+
+import { ArrowLeft, CheckCircle } from 'lucide-react'
+import { Button } from '@/components/ui/button'
+import { Progress } from '@/components/ui/progress'
+import { useRouter } from 'next/navigation'
+import { cn } from '@/components/ui/utils'
+
+interface LessonHeaderProps {
+  className?: string
+  progress: number
+  isCompleted?: boolean
+}
+
+export function LessonHeader({ className, progress, isCompleted }: LessonHeaderProps) {
+ const router = useRouter()
+
+ return (
+   <header className={cn(
+     "bg-background/80 backdrop-blur-sm border-b",
+     "px-4 py-3",
+     className
+   )}>
+     <div className="flex items-center gap-4">
+       <Button 
+         variant="ghost" 
+         size="icon"
+         onClick={() => router.back()}
+         className="shrink-0"
+       >
+         <ArrowLeft className="h-5 w-5" />
+         <span className="sr-only">Go back</span>
+       </Button>
+
+       <div className="flex-1 min-w-0">
+         <Progress 
+           value={progress}
+           className="h-2" 
+         />
+       </div>
+
+       <div className="shrink-0 text-sm font-medium flex items-center gap-2">
+         {progress}%
+         {isCompleted && (
+           <CheckCircle className="h-4 w-4 text-green-500" />
+         )}
+       </div>
+     </div>
+   </header>
+ )
+}
+
+================
+File: [lessonId]/components/loading-overlay.tsx
+================
+// app/lessons/[lessonId]/components/loading-overlay.tsx
+
+import { cn } from "@/components/ui/utils"
+
+export function LoadingOverlay() {
+    return (
+      <div className={cn(
+        "fixed inset-0 z-50",
+        "bg-background/80 backdrop-blur-sm",
+        "flex items-center justify-center"
+      )}>
+        <div className="space-y-4 text-center">
+          <div className="animate-spin">
+            {/* Loading spinner */}
+          </div>
+          <p className="text-sm text-muted-foreground">
+            Loading...
+          </p>
+        </div>
+      </div>
+    )
+  }
+
+================
+File: [lessonId]/components/slides/info-bullet-slide.tsx
+================
+// app/lessons/[lessonId]/components/slides/info-bullet-slide.tsx
+
+'use client'
+
+import { motion } from 'framer-motion'
+import { Button } from '@/components/ui/button'
+import { Card } from '@/components/ui/card'
+import { InfoBulletSlide as InfoBulletSlideType } from '../../../types/lesson.types'
+import { cn } from '@/components/ui/utils'
+import Image from 'next/image'
+import { ImageErrorBoundary } from '../image-error-boundary'
+
+interface InfoBulletSlideProps {
+  content: InfoBulletSlideType
+  isActive: boolean
+  isCompleted: boolean
+  onComplete: () => void
+}
+
+export function InfoBulletSlide({ 
+  content, 
+  isActive, 
+  isCompleted, 
+  onComplete 
+}: InfoBulletSlideProps) {
+  return (
+    <Card className={cn(
+      "overflow-hidden transition-all",
+      isActive && "ring-2 ring-primary"
+    )}>
+      <motion.div 
+        className="p-6"
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+      >
+        {content.imageUrl && (
+          <motion.div 
+            className="relative w-full h-[240px] mb-6"
+            initial={{ scale: 0.95 }}
+            animate={{ scale: 1 }}
+          >
+            <ImageErrorBoundary>
+              <Image
+                src={content.imageUrl}
+                alt={content.title}
+                fill
+                className="object-cover rounded-lg"
+                sizes="(max-width: 768px) 100vw, 768px"
+              />
+            </ImageErrorBoundary>
+          </motion.div>
+        )}
+
+        <motion.h2 
+          className="text-2xl font-bold mb-4"
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+        >
+          {content.title}
+        </motion.h2>
+
+        {content.introduction && (
+          <motion.p 
+            className="text-muted-foreground mb-4"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+          >
+            {content.introduction}
+          </motion.p>
+        )}
+
+        <motion.ul
+          className="space-y-3 mb-6"
+          initial="hidden"
+          animate="visible"
+          variants={{
+            visible: {
+              transition: { staggerChildren: 0.1 }
+            }
+          }}
+        >
+          {content.bullets.map((bullet, index) => (
+            <motion.li
+              key={index}
+              className="flex gap-3 text-muted-foreground"
+              variants={{
+                hidden: { opacity: 0, x: -20 },
+                visible: { opacity: 1, x: 0 }
+              }}
+            >
+              <span className="text-primary">•</span>
+              <span>{bullet.text}</span>
+            </motion.li>
+          ))}
+        </motion.ul>
+
+        {!isCompleted && (
+          <motion.div 
+            className="flex justify-end"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+          >
+            <Button onClick={onComplete}>Continue</Button>
+          </motion.div>
+        )}
+      </motion.div>
+    </Card>
+  )
+}
+
+================
+File: [lessonId]/components/slides/info-slide.tsx
+================
+// app/lessons/[lessonId]/components/slides/info-slide.tsx
+
+'use client'
+
+import { motion } from 'framer-motion'
+import { Button } from '@/components/ui/button'
+import { Card } from '@/components/ui/card'
+import { ImageErrorBoundary } from '../image-error-boundary'
+import { InfoSlide as InfoSlideType } from '../../../types/lesson.types'
+import { cn } from '@/components/ui/utils'
+import Image from 'next/image'
+
+
+interface InfoSlideProps {
+  content: InfoSlideType
+  isActive: boolean
+  isCompleted: boolean
+  onComplete: () => void
+}
+
+export function InfoSlide({ content, isActive, isCompleted, onComplete }: InfoSlideProps) {
+  return (
+    <Card className={cn(
+      "overflow-hidden transition-all",
+      isActive && "ring-2 ring-primary"
+    )}>
+      <motion.div 
+        className="p-6"
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+      >
+        {content.imageUrl && (
+          <motion.div 
+            className="relative w-full h-[240px] mb-6"
+            initial={{ scale: 0.95 }}
+            animate={{ scale: 1 }}
+          >
+            <ImageErrorBoundary>
+              <Image
+                src={content.imageUrl}
+                alt={content.title}
+                fill
+                className="object-cover rounded-lg"
+                sizes="(max-width: 768px) 100vw, 768px"
+              />
+            </ImageErrorBoundary>
+          </motion.div>
+        )}
+
+        <motion.h2 
+          className="text-2xl font-bold mb-4"
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+        >
+          {content.title}
+        </motion.h2>
+
+        <motion.p 
+          className="text-muted-foreground mb-6"
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+        >
+          {content.body}
+        </motion.p>
+
+        {!isCompleted && (
+          <motion.div 
+            className="flex justify-end"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+          >
+            <Button onClick={onComplete}>Continue</Button>
+          </motion.div>
+        )}
+      </motion.div>
+    </Card>
+  )
+}
+
+================
+File: [lessonId]/components/slides/question-slide.tsx
+================
+// app/lessons/[lessonId]/components/slides/question-slide.tsx
+
+'use client'
+
+import { useState } from 'react'
+import { motion, AnimatePresence } from 'framer-motion'
+import { Button } from '@/components/ui/button'
+import { Card } from '@/components/ui/card'
+import { QuestionSlide as QuestionSlideType } from '../../../types/lesson.types'
+import { cn } from '@/components/ui/utils'
+import Image from 'next/image'
+import { ImageErrorBoundary } from '../image-error-boundary'
+
+interface QuestionSlideProps {
+  content: QuestionSlideType
+  isActive: boolean
+  isCompleted: boolean
+  interactionState: string
+  onAnswer: (optionId: string, correctOptionId: string) => void
+  onComplete: () => void
+}
+
+export function QuestionSlide({ 
+  content, 
+  isActive, 
+  isCompleted, 
+  onAnswer,
+  onComplete 
+}: QuestionSlideProps) {
+  const [selectedId, setSelectedId] = useState<string | null>(null)
+
+  const correctOption = content.options.find(opt => opt.isCorrect)
+
+  return (
+    <Card className={cn(
+      "overflow-hidden transition-all",
+      isActive && "ring-2 ring-primary"
+    )}>
+      <motion.div 
+        className="p-6"
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+      >
+        {content.imageUrl && (
+          <motion.div 
+            className="relative w-full h-[240px] mb-6"
+            initial={{ scale: 0.95 }}
+            animate={{ scale: 1 }}
+          >
+            <ImageErrorBoundary>
+              <Image
+                src={content.imageUrl}
+                alt=""
+                fill
+                className="object-cover rounded-lg"
+                sizes="(max-width: 768px) 100vw, 768px"
+              />
+            </ImageErrorBoundary>
+          </motion.div>
+        )}
+
+        <motion.h2 
+          className="text-xl font-semibold mb-6"
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+        >
+          {content.question}
+        </motion.h2>
+
+        <div className="space-y-3 mb-6">
+          {content.options.map((option) => (
+            <motion.button
+              key={option.id}
+              onClick={() => !isCompleted && setSelectedId(option.id)}
+              className={cn(
+                "w-full p-4 rounded-lg border-2 text-left transition-colors",
+                selectedId === option.id && "border-primary bg-primary/5",
+                isCompleted && option.isCorrect && "border-green-500 bg-green-50",
+                isCompleted && !option.isCorrect && selectedId === option.id && "border-red-500 bg-red-50"
+              )}
+              initial={{ opacity: 0, x: -20 }}
+              animate={{ opacity: 1, x: 0 }}
+            >
+              {option.text}
+            </motion.button>
+          ))}
+        </div>
+
+        <AnimatePresence mode="wait">
+          {!isCompleted ? (
+            <motion.div
+              className="flex justify-end"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+            >
+              <Button 
+                onClick={() => {
+                  if (selectedId && correctOption) {
+                    onAnswer(selectedId, correctOption.id)
+                  }
+                }}
+                disabled={!selectedId}
+              >
+                Check Answer
+              </Button>
+            </motion.div>
+          ) : (
+            <motion.div
+              className="space-y-4"
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+            >
+              {content.explanation && (
+                <div className="bg-muted p-4 rounded-lg">
+                  {content.explanation}
+                </div>
+              )}
+              <div className="flex justify-end">
+                <Button onClick={onComplete}>Continue</Button>
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+      </motion.div>
+    </Card>
+  )
+}
+
+================
+File: [lessonId]/layout.tsx
+================
+// app/lessons/[lessonId]/layout.tsx
+
+'use client'
+
+import { LessonHeader } from './components/lesson-header'
+import { cn } from '@/components/ui/utils'
+
+interface LessonLayoutProps {
+ children: React.ReactNode
+}
+
+export default function LessonLayout({ children }: LessonLayoutProps) {
+ return (
+   <div className={cn(
+     "min-h-[100dvh] flex flex-col",
+     "bg-background"
+   )}>
+     <LessonHeader className="flex-none fixed top-0 left-0 right-0 z-50" progress={0} />
+     
+     <main className={cn(
+       "flex-1 relative",
+       "px-4 sm:px-6 lg:px-8",
+       "pt-safe-offset-top pb-safe-offset-bottom"
+     )}>
+       {children}
+     </main>
+   </div>
+ )
+}
+
+================
+File: [lessonId]/page.tsx
+================
+// app/lessons/[lessonId]/page.tsx
+
+import { ErrorBoundary } from '@/components/error-boundary'
+import { LessonContainer } from './components/lesson-container'
+
+interface PageProps {
+  params: Promise<{
+    lessonId: string
+  }>
+}
+
+export default async function LessonPage({ params }: PageProps) {
+  const { lessonId } = await params
+
+  return (
+    <ErrorBoundary>
+      <LessonContainer lessonId={lessonId} />
+    </ErrorBoundary>
+  )
+}
+
+================
+File: actions/lesson-completion.ts
+================
+// features/lessons/actions/lesson-completion.ts
+'use server'
+
+import { lessonCompletionService } from '../services/lesson-completion.service'
+import type { LessonCompletion } from '../types/db.types'
+
+export async function createCompletion(lessonId: string, token: string | null): Promise<LessonCompletion | null> {
+ try {
+   return await lessonCompletionService.createCompletion({ lesson_id: lessonId }, token)
+ } catch (error) {
+   // Silently handle duplicate completions
+   if (error instanceof Error && error.message.includes('UNIQUE_VIOLATION')) {
+     return null
+   }
+   // Rethrow other errors
+   throw error
+ }
+}
+
+================
+File: data/exercise-content.ts
+================
+// pacing-lesson.ts
+export const exerciseLessonContent = [
+    {
+      id: '1',
+      type: 'info',
+      title: 'What\'s the goal of these exercises?',
+      body: 'These exercises are not for strengthening-- they are diagnostic tools to guide your recovery.',
+      imageUrl: '/proneonelbows.png'
+    },
+    {
+      id: '2',
+      type: 'info',
+      title: 'Creating The Right Environment',
+      body: 'Stop any existing exercises you are currently doing for your low back.  This will help us more clearly determine which exercises are helping or hurting your condition.',
+      imageUrl: '/longterm.png'
+    },
+    {
+      id: '3',
+
+      type: 'infoBullet',
+      title: 'Understanding Your Exercise Response',
+      introduction: 'Several key responses to pay attention to with the exercises:',
+      bullets: [
+        { text: 'Your pain may appear then gradually diminish' },
+        { text: 'Your movement may improve with repetition' },
+        { text: 'Your symptoms can increase or decrease' },
+        { text: 'Your pain location may change or shift' }
+      ],
+      imageUrl: '/derangement.png'
+    },
+    {
+      id: '4',
+      type: 'infoBullet',
+      title: 'What is Centralization?',
+      introduction: 'Centralization is the movement of your pain to a more central location:',
+      bullets: [
+        { text: 'It is the best indicator of recovery' },
+        { text: 'Exercises that centralize are the correct movements' },
+        { text: 'Exercises that move pain away from the low back are the wrong movements' },
+        { text: 'Let the exercises that centralize your pain guide you' }
+      ],
+      imageUrl: '/centralize.png'
+    },
+
+    // {
+    //   id: '5',
+    //   type: 'question',
+    //   question: 'Is the pain centralizing?',
+    //   options: [
+    //     { id: '1', text: 'No, the symptoms are moving away from the low back.', isCorrect: true },
+    //     { id: '2', text: 'No, the symptoms are staying the same.', isCorrect: false },
+    //     { id: '3', text: 'Yes, the symptoms move from the back of the thigh to the low back.', isCorrect: false }
+    //   ],
+    //   explanation: 'Remember, centralization is the movement of your pain to a more central location. If your pain is moving away from the low back, it is worsening.',
+    //   imageUrl: '/beforeafter.png'
+    // },
+    // {
+    //   id: '6',
+    //   type: 'infoBullet',
+    //   title: 'What is Directional Preference?',
+    //   introduction: 'It\'s the movement direction that improves or centralizes your symptoms:',
+    //   bullets: [
+    //     { text: 'Most common direction is extension (backward bending)' },
+    //     { text: 'Up to 70% of people exhibit a directional preference' },
+    //     { text: 'Using repeated movements in the same direction can help determine the correct direction' },
+    //     { text: 'The exercise module ahead will help guide you to find your directional preference' }
+    //   ],
+    //   imageUrl: '/standflexext.png'
+      
+    // },
+    // {
+    //   id: '7',
+    //   type: 'question',
+    //   question: 'A person has pain in their lower back and right hip. After performing 10 repetitions of forward bends (flexion), their symptoms have spread to include their lower back, right hip, and right calf. Is flexion their directional preference?',
+    //   options: [
+    //     { id: '1', text: 'Yes, their symptoms are centralizing', isCorrect: false },
+    //     { id: '2', text: 'No, their symptoms are moving away from the low back.', isCorrect: true },
+    //     { id: '3', text: 'Not enough information to determine', isCorrect: false }
+    //   ],
+    //   explanation: 'The answer is no.  The patient symptoms have moved further down into the calf.  This is the opposite of centralization, and tells us that we do not want to continue in that direction.  Remember:  If symptoms move away from the spine, pain intensity increases and remains worse, and/or your range of movement decreases,  you should discontinue the movement in that direction.',
+    //   imageUrl: '/beforeaftercalf.png'
+    // },
+
+    // {
+    //   id: '8',
+    //   type: 'question',
+    //   question: 'The same person now has pain in their low back, right hip, and right calf. After performing 10 repetitions of backward bends (extension), their symptoms are now in the low back and the right hip. Is extension their directional preference?',
+    //   options: [
+    //     { id: '1', text: 'Yes, their symptoms are centralizing', isCorrect: true },
+    //     { id: '2', text: 'No, their symptoms are moving away from the low back.', isCorrect: false },
+    //     { id: '3', text: 'Not enough information to determine', isCorrect: false }
+    //   ],
+    //   explanation: 'The answer is yes!  The right calf no longer has any symptoms, and the pain is back to the original location of the low back and right hip.  This is a centralizing response.  They should continue with extension.',
+    //   imageUrl: '/afterbeforecalf.png'
+    // },
+    // {
+    //   id: '9',
+    //   type: 'info',
+    //   title: 'Last but not least...',
+    //   body: 'We understand that was a lot. Feel free to scroll up and review any of the principles we went over. The next module will help guide you through a series of exercises to help you find your directional preference.',
+    //   imageUrl: '/sphinx-pose.png',
+    //   nextRoute: '/exercise-progression/1'
+    // }
+  ]
+
+================
+File: data/posture-content.ts
+================
+// posture-lesson.ts
+export const postureLessonContent = [
+    {
+      id: '1',
+      type: 'info',
+      title: 'Understanding Posture',
+      body: 'Good posture is essential for reducing strain on your body and preventing pain. In this lesson, we\'ll explore what makes good posture and how to maintain it throughout your day.',
+      imageUrl: '/goodbadposture.png'
+    },
+    {
+      id: '2',
+      type: 'info',
+      title: 'The Spine\'s Natural Curves',
+      body: 'Your spine has natural curves that help distribute weight and absorb shock. Maintaining these curves while sitting and standing is key to good posture.',
+      imageUrl: '/lumbar-good.png'
+    },
+    {
+      id: '3',
+      type: 'question',
+      question: 'Which of these is a sign of poor posture?',
+      options: [
+        { id: '1', text: 'Rounded shoulders and forward head position', isCorrect: true },
+        { id: '2', text: 'Ears aligned with shoulders when viewed from the side', isCorrect: false },
+        { id: '3', text: 'Natural curve in lower back', isCorrect: false }
+      ],
+      explanation: 'Rounded shoulders and forward head position put extra strain on your neck and upper back muscles. This posture often develops from prolonged computer use or phone viewing.',
+      imageUrl: '/posture-good.png'
+    },
+    {
+      id: '4',
+      type: 'info',
+      title: 'Common Posture Mistakes',
+      body: 'Many daily activities can lead to poor posture. Looking down at phones, slouching at desks, and carrying heavy bags on one shoulder are common culprits.',
+      imageUrl: '/slouchposture.png'
+    },
+    {
+      id: '5',
+      type: 'question',
+      question: 'What is the best way to check your standing posture?',
+      options: [
+        { id: '1', text: 'Stand with your back against a wall, with head, shoulders, and hips touching', isCorrect: true },
+        { id: '2', text: 'Look in the mirror while standing normally', isCorrect: false },
+        { id: '3', text: 'Ask someone to take a photo of you', isCorrect: false }
+      ],
+      explanation: 'The wall check provides consistent reference points for alignment. Your head, shoulder blades, and buttocks should touch the wall, with feet about 4 inches from the wall.',
+      imageUrl: ''
+    }
+  ]
+
+================
+File: hooks/__tests__/use-lesson-completion.test.ts
+================
+// features/lessons/hooks/__tests__/use-lesson-completion.test.tsx
+
+import { renderHook, act } from '@testing-library/react'
+import { useAuth } from '@clerk/nextjs'
+import { useLessonCompletion } from '../use-lesson-completion'
+import { createCompletion } from '../../actions/lesson-completion'
+
+
+// Mock dependencies
+jest.mock('@clerk/nextjs', () => ({
+  useAuth: jest.fn()
+}))
+
+jest.mock('../../actions/lesson-completion', () => ({
+  createCompletion: jest.fn()
+}))
+
+describe('useLessonCompletion', () => {
+  const mockLessonId = 'lesson-1'
+  const mockToken = 'test-token'
+
+  beforeEach(() => {
+    jest.clearAllMocks()
+    ;(useAuth as jest.Mock).mockReturnValue({
+      getToken: jest.fn().mockResolvedValue(mockToken)
+    })
+  })
+
+  it('should initialize with default state', () => {
+    const { result } = renderHook(() => useLessonCompletion(mockLessonId))
+
+    expect(result.current.isCompleting).toBe(false)
+    expect(result.current.error).toBeNull()
+  })
+
+  it('should successfully complete a lesson', async () => {
+    ;(createCompletion as jest.Mock).mockResolvedValue({
+      id: '123',
+      lesson_id: mockLessonId,
+      completed_at: new Date().toISOString()
+    })
+
+    const { result } = renderHook(() => useLessonCompletion(mockLessonId))
+
+    await act(async () => {
+      await result.current.complete()
+    })
+
+    expect(createCompletion).toHaveBeenCalledWith(mockLessonId, mockToken)
+    expect(result.current.isCompleting).toBe(false)
+    expect(result.current.error).toBeNull()
+  })
+
+  it('should handle completion failure', async () => {
+    const error = new Error('Failed to complete')
+    ;(createCompletion as jest.Mock).mockRejectedValue(error)
+
+    const { result } = renderHook(() => useLessonCompletion(mockLessonId))
+
+    await act(async () => {
+      try {
+        await result.current.complete()
+      } catch (e) {
+        expect(e).toBe(error)
+      }
+    })
+
+    expect(result.current.isCompleting).toBe(false)
+    expect(result.current.error).toBe(error)
+  })
+
+  it('should handle auth token failure', async () => {
+    const error = new Error('Auth error')
+    ;(useAuth as jest.Mock).mockReturnValue({
+      getToken: jest.fn().mockRejectedValue(error)
+    })
+
+    const { result } = renderHook(() => useLessonCompletion(mockLessonId))
+
+    await act(async () => {
+      try {
+        await result.current.complete()
+      } catch (e) {
+        expect(e).toBe(error)
+      }
+    })
+
+    expect(result.current.isCompleting).toBe(false)
+    expect(result.current.error).toBe(error)
+  })
+})
+
+================
+File: hooks/use-lesson-completion.ts
+================
+// /features/lessons/hooks/use-lesson-completion.ts
+import { useState, useCallback } from 'react'
+import { useAuth } from '@clerk/nextjs'
+import { createCompletion } from '../actions/lesson-completion'
+import type { LessonCompletion } from '../types/db.types'
+
+export function useLessonCompletion(lessonId: string) {
+  const { getToken } = useAuth()
+  const [isCompleting, setIsCompleting] = useState(false)
+  const [error, setError] = useState<Error | null>(null)
+
+  const complete = useCallback(async () => {
+    try {
+      setIsCompleting(true)
+      setError(null)
+      const token = await getToken({ template: 'supabase' })
+      await createCompletion(lessonId, token)
+    } catch (err) {
+      setError(err instanceof Error ? err : new Error('Failed to complete lesson'))
+      throw err
+    } finally {
+      setIsCompleting(false)
+    }
+  }, [lessonId, getToken])
+
+  return {
+    complete,
+    isCompleting,
+    error
+  }
+}
+
+================
+File: hooks/use-lesson-progress.ts
+================
+// features/lessons/hooks/use-lesson-progress.ts
+
+import { useState, useCallback, useEffect } from 'react'
+import { useAuth } from '@clerk/nextjs'
+import { LessonProgress } from '../model/lesson-progress'
+import type { Lesson, Slide } from '../types/lesson.types'
+import { exerciseLessonContent } from '../data/exercise-content'
+import { postureLessonContent } from '../data/posture-content'
+
+export function useLessonProgress(lessonId?: string) {
+  const { userId } = useAuth()
+  const [lesson, setLesson] = useState<Lesson | null>(null)
+  const [progressModel] = useState(() => new LessonProgress())
+  const [loading, setLoading] = useState(false)
+
+  // Load static lesson content based on lessonId
+  useEffect(() => {
+    async function loadLesson() {
+      try {
+        setLoading(true)
+        
+        // Use static content based on lessonId
+        const slides = lessonId === 'exercise-lesson' 
+          ? exerciseLessonContent 
+          : lessonId === 'posture-lesson'
+            ? postureLessonContent
+            : []
+
+        if (slides.length > 0) {
+          const lessonData: Lesson = {
+            id: lessonId || 'default',
+            title: lessonId === 'exercise-lesson' ? 'Exercise Lesson' : 'Posture Lesson',
+            slides: slides as Slide[],
+            progress: 0,
+            currentSlideIndex: 0,
+            completedSlideIds: [],
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+            userId: userId || 'anonymous'
+          }
+          setLesson(lessonData)
+        }
+      } catch (error) {
+        console.error('Error loading lesson:', error)
+      } finally {
+        setLoading(false)
+      }
+    }
+
+    loadLesson()
+  }, [lessonId, userId])
+
+  const completeSlide = useCallback(async (slideId: string) => {
+    if (!lesson) return
+
+    try {
+      setLoading(true)
+      progressModel.completeSlide(slideId, lesson.slides.length)
+      
+      // Update local lesson state
+      setLesson(prev => {
+        if (!prev) return null
+        const newCompletedSlideIds = [...prev.completedSlideIds, slideId]
+        return {
+          ...prev,
+          completedSlideIds: newCompletedSlideIds,
+          progress: progressModel.getProgress(),
+          isCompleted: newCompletedSlideIds.length === lesson.slides.length
+        }
+      })
+    } finally {
+      setLoading(false)
+    }
+  }, [lesson, progressModel])
+
+  return {
+    lesson,
+    progress: progressModel.getProgress(),
+    completedSlides: new Set(lesson?.completedSlideIds || []),
+    currentIndex: progressModel.getCurrentIndex(),
+    loading,
+    completeSlide,
+    isCompleted: lesson?.completedSlideIds.length === lesson?.slides.length
+  }
+}
+
+================
+File: hooks/use-lesson.ts
+================
+// features/lessons/hooks/use-lesson.ts
+
+import { useLessonProgress } from './use-lesson-progress'
+import { useSlideInteraction } from './use-slide-interaction'
+import { useViewportScroll } from './use-viewport-scroll'
+import { useMemo } from 'react'
+
+export function useLesson(lessonId?: string) {
+  const {
+    lesson,
+    progress,
+    completedSlides,
+    currentIndex,
+    loading,
+    completeSlide
+  } = useLessonProgress(lessonId)
+
+  const {
+    state: interactionState,
+    selectedOption,
+    isCorrect,
+    hasReviewed,
+    canSubmit,
+    canViewExplanation,
+    handleAnswer,
+    showExplanationPanel,
+    reset: resetInteraction
+  } = useSlideInteraction()
+
+  const {
+    updateSlidePosition,
+    scrollToSlide,
+    activeSlideId,
+    lastScrollPosition
+  } = useViewportScroll()
+
+  // Calculate visible slides based on lesson data and current index
+  const visibleSlides = useMemo(() => {
+    if (!lesson?.slides) return []
+    // Only show current slide
+    return lesson.slides.slice(0, currentIndex + 1)
+  }, [lesson?.slides, currentIndex])
+
+  return {
+    // Lesson Progress
+    lesson,
+    visibleSlides,
+    progress,
+    completedSlides,
+    currentIndex,
+    loading,
+    completeSlide,
+
+    // Interaction State  
+    interactionState,
+    selectedOption,
+    isCorrect,
+    hasReviewed,
+    canSubmit,
+    canViewExplanation,
+    handleAnswer,
+    showExplanationPanel,
+    resetInteraction,
+
+    // Viewport/Scroll
+    updateSlidePosition,
+    scrollToSlide,
+    activeSlideId,
+    lastScrollPosition
+  }
+}
+
+================
+File: hooks/use-slide-interaction.ts
+================
+// features/lessons/hooks/use-slide-interaction.ts
+
+import { useState, useCallback } from 'react'
+import { SlideInteraction } from '../model/slide-interaction'
+
+export function useSlideInteraction() {
+  const [interactionModel] = useState(() => new SlideInteraction())
+
+  const handleAnswer = useCallback((optionId: string, correctOptionId: string) => {
+    interactionModel.selectOption(optionId)
+    interactionModel.submit(correctOptionId)
+  }, [interactionModel])
+
+  const showExplanationPanel = useCallback(() => {
+    interactionModel.viewExplanation()
+  }, [interactionModel])
+
+  const reset = useCallback(() => {
+    interactionModel.reset()
+  }, [interactionModel])
+
+  return {
+    state: interactionModel.getState(),
+    selectedOption: interactionModel.getSelectedOption(),
+    isCorrect: interactionModel.isAnswerCorrect(),
+    hasReviewed: interactionModel.hasReviewed(),
+    canSubmit: interactionModel.canSubmit(),
+    canViewExplanation: interactionModel.canViewExplanation(),
+    handleAnswer,
+    showExplanationPanel,
+    reset
+  }
+}
+
+================
+File: hooks/use-viewport-scroll.ts
+================
+import { useState, useEffect, useCallback, useRef } from 'react';
+
+interface ViewportBounds {
+  top: number;
+  bottom: number;
+}
+
+interface SlidePosition {
+  slideId: string;
+  bounds: ViewportBounds;
+  isActive: boolean;
+}
+
+const HEADER_HEIGHT = 72; // Adjust this value based on the actual height of your fixed header
+
+export function useViewportScroll() {
+  const [slidePositions, setSlidePositions] = useState<Map<string, SlidePosition>>(new Map());
+  const [activeSlideId, setActiveSlideId] = useState<string | null>(null);
+  const [lastScrollPosition, setLastScrollPosition] = useState<number>(0);
+  const lastScrollPositionRef = useRef<number>(0);
+
+  const updateSlidePosition = useCallback((slideId: string, bounds: ViewportBounds) => {
+    setSlidePositions(prev => {
+      const newPositions = new Map(prev);
+      newPositions.set(slideId, { slideId, bounds, isActive: false });
+      return newPositions;
+    });
+  }, []);
+
+  const scrollToSlide = useCallback((index: number) => {
+    const slides = document.querySelectorAll('.slide-item');
+    const targetSlide = slides[index];
+    
+    if (!targetSlide) return;
+
+    const slideRect = targetSlide.getBoundingClientRect();
+    const scrollPosition = slideRect.top + window.scrollY - HEADER_HEIGHT; // Adjusted for header height
+
+    lastScrollPositionRef.current = scrollPosition;
+    setLastScrollPosition(scrollPosition);
+
+    window.scrollTo({
+      top: Math.max(0, scrollPosition),
+      behavior: 'smooth'
+    });
+
+    const verifyScroll = () => {
+      const currentPosition = window.scrollY;
+      if (Math.abs(currentPosition - lastScrollPositionRef.current) > 2) {
+        window.scrollTo(0, lastScrollPositionRef.current);
+      }
+    };
+
+    setTimeout(verifyScroll, 1000);
+  }, []);
+
+  useEffect(() => {
+    const handleScroll = () => {
+      const scrollPosition = window.scrollY;
+      setLastScrollPosition(scrollPosition);
+
+      slidePositions.forEach((position, slideId) => {
+        const isVisible =
+          position.bounds.bottom >= scrollPosition &&
+          position.bounds.top <= scrollPosition + window.innerHeight;
+
+        if (isVisible && activeSlideId !== slideId) {
+          setActiveSlideId(slideId);
+        }
+      });
+    };
+
+    window.addEventListener('scroll', handleScroll);
+    return () => window.removeEventListener('scroll', handleScroll);
+  }, [slidePositions, activeSlideId]);
+
+  return {
+    updateSlidePosition,
+    scrollToSlide,
+    activeSlideId,
+    lastScrollPosition,
+  };
+}
+
+================
+File: model/__tests__/lesson-progress.test.ts
+================
+// features/lessons/model/__tests__/lesson-progress.test.ts
+
+import { LessonProgress } from '../lesson-progress'
+
+describe('LessonProgress', () => {
+  let progress: LessonProgress
+
+  beforeEach(() => {
+    // Fresh instance before each test
+    progress = new LessonProgress()
+  })
+
+  describe('Lesson State', () => {
+    test('should initialize with correct starting values', () => {
+      expect(progress.getCurrentIndex()).toBe(0)
+      expect(progress.getProgress()).toBe(0)
+      expect(progress.isLessonComplete()).toBe(false)
+      expect(progress.getCompletedSlides()).toHaveLength(0)
+    })
+
+    test('should track completed status correctly', () => {
+      // Complete all slides in a 2-slide lesson
+      progress.completeSlide('slide1', 2)
+      progress.completeSlide('slide2', 2)
+      
+      expect(progress.isLessonComplete()).toBe(true)
+      expect(progress.getProgress()).toBe(100)
+    })
+  })
+
+  describe('Slide Completion', () => {
+    test('should only count each slide once', () => {
+      progress.completeSlide('slide1', 4)
+      progress.completeSlide('slide1', 4)
+      
+      expect(progress.getProgress()).toBe(25) // Only counted once
+    })
+
+    test('should calculate progress correctly', () => {
+      progress.completeSlide('slide1', 4)
+      expect(progress.getProgress()).toBe(25)
+      
+      progress.completeSlide('slide2', 4)
+      expect(progress.getProgress()).toBe(50)
+    })
+  })
+
+  describe('Navigation', () => {
+    test('should not advance beyond total slides', () => {
+      expect(progress.canAdvance(1)).toBe(false)
+    })
+
+    test('should advance when possible', () => {
+      expect(progress.canAdvance(2)).toBe(true)
+      progress.advanceSlide(2)
+      expect(progress.getCurrentIndex()).toBe(1)
+    })
+
+    test('should track current position correctly', () => {
+      progress.advanceSlide(3)
+      expect(progress.getCurrentIndex()).toBe(1)
+      
+      progress.advanceSlide(3)
+      expect(progress.getCurrentIndex()).toBe(2)
+    })
+  })
+})
+
+================
+File: model/__tests__/slide-interaction.test.ts
+================
+// features/lessons/model/__tests__/slide-interaction.test.ts
+
+import { SlideInteraction } from '../slide-interaction'
+
+describe('SlideInteraction', () => {
+  let interaction: SlideInteraction
+
+  beforeEach(() => {
+    interaction = new SlideInteraction()
+  })
+
+  describe('State Management', () => {
+    test('should initialize in viewing state', () => {
+      expect(interaction.getState()).toBe('viewing')
+      expect(interaction.getSelectedOption()).toBeNull()
+      expect(interaction.isAnswerCorrect()).toBeNull()
+    })
+
+    test('should transition through states correctly', () => {
+      interaction.startAnswering()
+      expect(interaction.getState()).toBe('answering')
+
+      interaction.selectOption('option1')
+      interaction.submit('option1')
+      expect(interaction.getState()).toBe('reviewing')
+    })
+  })
+
+  describe('Answer Handling', () => {
+    test('should handle correct answer', () => {
+      interaction.startAnswering()
+      interaction.selectOption('correct')
+      interaction.submit('correct')
+      
+      expect(interaction.isAnswerCorrect()).toBe(true)
+    })
+
+    test('should handle incorrect answer', () => {
+      interaction.startAnswering()
+      interaction.selectOption('wrong')
+      interaction.submit('correct')
+      
+      expect(interaction.isAnswerCorrect()).toBe(false)
+    })
+  })
+
+  describe('Explanation Viewing', () => {
+    test('should track explanation state', () => {
+      expect(interaction.hasReviewed()).toBe(false)
+      
+      interaction.viewExplanation()
+      expect(interaction.hasReviewed()).toBe(true)
+      expect(interaction.getState()).toBe('explaining')
+    })
+  })
+
+  describe('Reset Functionality', () => {
+    test('should reset to initial answering state', () => {
+      interaction.selectOption('option1')
+      interaction.submit('correct')
+      interaction.reset()
+
+      expect(interaction.getState()).toBe('answering')
+      expect(interaction.getSelectedOption()).toBeNull()
+      expect(interaction.isAnswerCorrect()).toBeNull()
+    })
+  })
+})
+
+================
+File: model/__tests__/viewport-state.test.ts
+================
+// features/lessons/model/__tests__/viewport-state.test.ts
+
+import { ViewportState } from '../viewport-state'
+
+describe('ViewportState', () => {
+  let viewport: ViewportState
+
+  beforeEach(() => {
+    viewport = new ViewportState()
+  })
+
+  describe('Slide Position Tracking', () => {
+    test('should track slide positions', () => {
+      viewport.updateSlidePosition('slide1', { top: 0, bottom: 100 })
+      expect(viewport.getSlideBounds('slide1')).toEqual({ top: 0, bottom: 100 })
+    })
+
+    test('should determine if slide is visible', () => {
+      viewport.updateSlidePosition('slide1', { top: 50, bottom: 150 })
+      
+      expect(viewport.isSlideVisible('slide1', { top: 0, bottom: 100 })).toBe(true)
+      expect(viewport.isSlideVisible('slide1', { top: 200, bottom: 300 })).toBe(false)
+    })
+  })
+
+  describe('Active Slide Management', () => {
+    test('should track active slide', () => {
+      viewport.setActiveSlide('slide1')
+      expect(viewport.getActiveSlideId()).toBe('slide1')
+    })
+  })
+
+  describe('Scroll Position', () => {
+    test('should record and retrieve scroll position', () => {
+      viewport.recordScrollPosition(100)
+      expect(viewport.getLastScrollPosition()).toBe(100)
+    })
+  })
+})
+
+================
+File: model/lesson-progress.ts
+================
+// features/lessons/model/lesson-progress.ts
+
+interface LessonProgressState {
+    currentSlideIndex: number
+    completedSlideIds: Set<string>
+    progress: number
+    isStarted: boolean
+    isCompleted: boolean
+  }
+  
+  export class LessonProgress {
+    private state: LessonProgressState
+  
+    constructor(initial?: Partial<LessonProgressState>) {
+      this.state = {
+        currentSlideIndex: initial?.currentSlideIndex ?? 0,
+        completedSlideIds: new Set(initial?.completedSlideIds),
+        progress: initial?.progress ?? 0,
+        isStarted: initial?.isStarted ?? false,
+        isCompleted: initial?.isCompleted ?? false
+      }
+    }
+  
+    completeSlide(slideId: string, totalSlides: number): void {
+      this.state.completedSlideIds.add(slideId)
+      this.state.progress = (this.state.completedSlideIds.size / totalSlides) * 100
+      
+      // Advance to next slide if not at the end
+      if (this.state.currentSlideIndex < totalSlides - 1) {
+        this.state.currentSlideIndex++
+      }
+      
+      if (this.state.progress === 100) {
+        this.state.isCompleted = true
+      }
+    }
+  
+    startLesson(): void {
+      if (!this.state.isStarted) {
+        this.state.isStarted = true
+        this.state.currentSlideIndex = 0
+      }
+    }
+  
+    advanceSlide(totalSlides: number): boolean {
+      if (this.canAdvance(totalSlides)) {
+        this.state.currentSlideIndex++
+        return true
+      }
+      return false
+    }
+  
+    canAdvance(totalSlides: number): boolean {
+      return this.state.currentSlideIndex < totalSlides - 1
+    }
+  
+    isSlideCompleted(slideId: string): boolean {
+      return this.state.completedSlideIds.has(slideId)
+    }
+  
+    getProgress(): number {
+      return this.state.progress
+    }
+  
+    getCurrentIndex(): number {
+      return this.state.currentSlideIndex
+    }
+  
+    getCompletedSlides(): string[] {
+      return Array.from(this.state.completedSlideIds)
+    }
+  
+    isLessonComplete(): boolean {
+      return this.state.isCompleted
+    }
+  
+    toJSON() {
+      return {
+        currentSlideIndex: this.state.currentSlideIndex,
+        completedSlideIds: Array.from(this.state.completedSlideIds),
+        progress: this.state.progress,
+        isStarted: this.state.isStarted,
+        isCompleted: this.state.isCompleted
+      }
+    }
+  }
+
+================
+File: model/slide-interaction.ts
+================
+// features/lessons/model/slide-interaction.ts
+
+export type InteractionState = 'viewing' | 'answering' | 'reviewing' | 'explaining'
+
+interface SlideInteractionState {
+ state: InteractionState
+ selectedOptionId: string | null
+ hasSubmitted: boolean 
+ hasViewedExplanation: boolean
+ isCorrect: boolean | null
+}
+
+export class SlideInteraction {
+ private state: SlideInteractionState
+
+ constructor(initial?: Partial<SlideInteractionState>) {
+   this.state = {
+     state: initial?.state ?? 'viewing',
+     selectedOptionId: initial?.selectedOptionId ?? null,
+     hasSubmitted: initial?.hasSubmitted ?? false,
+     hasViewedExplanation: initial?.hasViewedExplanation ?? false,
+     isCorrect: initial?.isCorrect ?? null
+   }
+ }
+
+ selectOption(optionId: string): void {
+   if (this.state.state === 'answering') {
+     this.state.selectedOptionId = optionId
+   }
+ }
+
+ submit(correctOptionId: string): void {
+   if (!this.state.selectedOptionId) return
+
+   this.state.hasSubmitted = true
+   this.state.isCorrect = this.state.selectedOptionId === correctOptionId
+   this.state.state = 'reviewing'
+ }
+
+ startAnswering(): void {
+   this.state.state = 'answering'
+ }
+
+ viewExplanation(): void {
+   this.state.state = 'explaining'
+   this.state.hasViewedExplanation = true
+ }
+
+ reset(): void {
+   this.state.state = 'answering'
+   this.state.selectedOptionId = null
+   this.state.hasSubmitted = false
+   this.state.isCorrect = null
+ }
+
+ canSubmit(): boolean {
+   return !!this.state.selectedOptionId && !this.state.hasSubmitted
+ }
+
+ canViewExplanation(): boolean {
+   return this.state.hasSubmitted && !this.state.hasViewedExplanation
+ }
+ 
+ getState(): InteractionState {
+   return this.state.state
+ }
+
+ getSelectedOption(): string | null {
+   return this.state.selectedOptionId
+ }
+
+ isAnswerCorrect(): boolean | null {
+   return this.state.isCorrect
+ }
+
+ hasReviewed(): boolean {
+   return this.state.hasViewedExplanation
+ }
+
+ toJSON() {
+   return { ...this.state }
+ }
+}
+
+================
+File: model/viewport-state.ts
+================
+// features/lessons/model/viewport-state.ts
+
+interface ViewportBounds {
+    top: number
+    bottom: number
+   }
+   
+   interface SlidePosition {
+    slideId: string
+    bounds: ViewportBounds
+    isActive: boolean
+   }
+   
+   export class ViewportState {
+    private slidePositions: Map<string, SlidePosition>
+    private activeSlideId: string | null
+    private lastScrollPosition: number
+   
+    constructor() {
+      this.slidePositions = new Map()
+      this.activeSlideId = null
+      this.lastScrollPosition = 0
+    }
+   
+    updateSlidePosition(slideId: string, bounds: ViewportBounds): void {
+      this.slidePositions.set(slideId, {
+        slideId,
+        bounds,
+        isActive: false
+      })
+    }
+   
+    setActiveSlide(slideId: string): void {
+      this.activeSlideId = slideId
+      this.slidePositions.forEach(position => {
+        position.isActive = position.slideId === slideId
+      })
+    }
+   
+    isSlideVisible(slideId: string, viewportBounds: ViewportBounds): boolean {
+      const position = this.slidePositions.get(slideId)
+      if (!position) return false
+   
+      return (
+        position.bounds.bottom >= viewportBounds.top && 
+        position.bounds.top <= viewportBounds.bottom
+      )
+    }
+   
+    recordScrollPosition(position: number): void {
+      this.lastScrollPosition = position
+    }
+   
+    getLastScrollPosition(): number {
+      return this.lastScrollPosition
+    }
+   
+    getActiveSlideId(): string | null {
+      return this.activeSlideId
+    }
+   
+    getSlideBounds(slideId: string): ViewportBounds | null {
+      return this.slidePositions.get(slideId)?.bounds ?? null
+    }
+   
+    toJSON() {
+      return {
+        positions: Array.from(this.slidePositions.entries()),
+        activeSlideId: this.activeSlideId,
+        lastScrollPosition: this.lastScrollPosition
+      }
+    }
+   }
+
+================
+File: services/__tests__/lesson-completion.service.test.ts
+================
+// features/lessons/services/__tests__/lesson-completion.service.test.ts
+
+import { lessonCompletionService } from '../lesson-completion.service'
+import SupabaseClientSingleton from '@/lib/supabase/client-singleton'
+
+jest.mock('@/lib/supabase/client-singleton', () => ({
+ __esModule: true,
+ default: {
+   getInstance: jest.fn()
+ }
+}))
+
+describe('LessonCompletionService', () => {
+ const mockToken = 'test-token'
+ const mockLessonId = 'lesson-1'
+ const mockUserId = 'user-1'
+ let mockSupabaseClient: any
+
+ beforeEach(() => {
+   jest.clearAllMocks()
+   
+   mockSupabaseClient = {
+     from: jest.fn().mockReturnValue({
+       insert: jest.fn().mockReturnThis(),
+       select: jest.fn().mockReturnThis(),
+       single: jest.fn()
+     }),
+     rpc: jest.fn()
+   }
+
+   ;(SupabaseClientSingleton.getInstance as jest.Mock).mockResolvedValue(mockSupabaseClient)
+ })
+
+ describe('createCompletion', () => {
+   beforeEach(() => {
+     mockSupabaseClient.rpc.mockResolvedValue({
+       data: mockUserId,
+       error: null
+     })
+   })
+
+   it('should create a new completion record', async () => {
+     const mockCompletion = {
+       id: '123',
+       lesson_id: mockLessonId,
+       user_id: mockUserId,
+       completed_at: new Date().toISOString()
+     }
+
+     mockSupabaseClient.from().single.mockResolvedValue({
+       data: mockCompletion,
+       error: null
+     })
+
+     const result = await lessonCompletionService.createCompletion(
+       { lesson_id: mockLessonId }, 
+       mockToken
+     )
+     
+     expect(result).toEqual(mockCompletion)
+     expect(mockSupabaseClient.from).toHaveBeenCalledWith('lesson_completions')
+     expect(mockSupabaseClient.rpc).toHaveBeenCalledWith('requesting_user_id')
+   })
+
+   it('should throw error when user id not found', async () => {
+     mockSupabaseClient.rpc.mockResolvedValue({
+       data: null,
+       error: null
+     })
+
+     await expect(
+       lessonCompletionService.createCompletion(
+         { lesson_id: mockLessonId }, 
+         mockToken
+       )
+     ).rejects.toThrow('No user ID found in JWT claims')
+   })
+ })
+})
+
+================
+File: services/__tests__/use-lesson-completion.test.ts
+================
+// features/lessons/hooks/__tests__/use-lesson-completion.test.ts
+
+import { renderHook, act } from '@testing-library/react'
+import { useAuth } from '@clerk/nextjs'
+import { useLessonCompletion } from '../../hooks/use-lesson-completion'
+import { createCompletion } from '../../actions/lesson-completion'
+
+// Mock dependencies
+jest.mock('@clerk/nextjs', () => ({
+  useAuth: jest.fn()
+}))
+
+jest.mock('../../actions/lesson-completion', () => ({
+  createCompletion: jest.fn()
+}))
+
+describe('useLessonCompletion', () => {
+  const mockLessonId = 'lesson-1'
+  const mockToken = 'test-token'
+
+  beforeEach(() => {
+    jest.clearAllMocks()
+    ;(useAuth as jest.Mock).mockReturnValue({
+      getToken: jest.fn().mockResolvedValue(mockToken)
+    })
+  })
+
+  it('should handle successful completion', async () => {
+    ;(createCompletion as jest.Mock).mockResolvedValue({
+      id: '123',
+      lesson_id: mockLessonId,
+      completed_at: new Date().toISOString()
+    })
+
+    const { result } = renderHook(() => useLessonCompletion(mockLessonId))
+
+    expect(result.current.isCompleting).toBe(false)
+    expect(result.current.error).toBeNull()
+
+    await act(async () => {
+      await result.current.complete()
+    })
+
+    expect(createCompletion).toHaveBeenCalledWith(mockLessonId, mockToken)
+    expect(result.current.isCompleting).toBe(false)
+    expect(result.current.error).toBeNull()
+  })
+
+  it('should handle completion errors', async () => {
+    const error = new Error('Failed to complete')
+    ;(createCompletion as jest.Mock).mockRejectedValue(error)
+
+    const { result } = renderHook(() => useLessonCompletion(mockLessonId))
+
+    await act(async () => {
+      try {
+        await result.current.complete()
+        
+      } catch (e) {
+        // Error is expected
+      }
+    })
+
+    expect(result.current.isCompleting).toBe(false)
+    expect(result.current.error).toEqual(error)
+  })
+})
+
+================
+File: services/lesson-completion.service.ts
+================
+// /features/lessons/services/lesson-completion.service.ts
 import { BaseService } from '@/lib/supabase/services/base'
-import type { ExamAttempt, CreateExamAttempt, UpdateExamAttempt } from '../types/db.types'
+import type { LessonCompletion, CreateLessonCompletion } from '../types/db.types'
 
+// features/lessons/services/lesson-completion.service.ts
 
-export class ExamService extends BaseService {
-  private readonly examTable = 'initial_exams'
-  private readonly bodyMapTable = 'body_map_selections'
+export class LessonCompletionService extends BaseService {
+    private readonly table = 'lesson_completions'
+  
+    async createCompletion(completion: CreateLessonCompletion, token?: string | null): Promise<LessonCompletion> {
+      return this.withErrorHandling(async () => {
+        const client = await this.getClient(token)
+        
+        const { data: claims } = await client.rpc('requesting_user_id')
+        if (!claims) throw new Error('No user ID found in JWT claims')
+  
+        const { data, error } = await client
+          .from(this.table)
+          .insert({ ...completion, user_id: claims })
+          .select()
+          .single()
+        
+        if (error) throw error
+        return data
+      })
+    }
+  }
+  
+  export const lessonCompletionService = new LessonCompletionService()
 
-  async hasCompletedExam(token?: string | null): Promise<boolean> {
+================
+File: services/lesson.service.ts
+================
+// features/lessons/services/lesson.service.ts
+
+import { BaseService } from '@/lib/supabase/services/base'
+import type { Lesson, CreateLesson, UpdateLesson } from '../types/lesson.types'
+
+export class LessonService extends BaseService {
+  private readonly table = 'lessons'
+
+  async getLesson(lessonId: string, token?: string | null): Promise<Lesson | null> {
     return this.withErrorHandling(async () => {
       const client = await this.getClient(token)
       const { data, error } = await client
-        .from(this.examTable)
-        .select('id')
-        .eq('is_completed', true)
-        .limit(1)
+        .from(this.table)
+        .select('*')
+        .eq('id', lessonId)
+        .maybeSingle()
       
       if (error) throw error
-      return data && data.length > 0
+      return data
     })
   }
 
-  async createBodyMapSelection(
-    selections: Record<string, boolean>,
-    score: number,
+  async getLessonProgress(userId: string, lessonId: string, token?: string | null): Promise<Lesson | null> {
+    return this.withErrorHandling(async () => {
+      const client = await this.getClient(token)
+      const { data, error } = await client
+        .from(this.table)
+        .select('*')
+        .eq('id', lessonId)
+        .eq('user_id', userId)
+        .maybeSingle()
+
+      if (error) throw error
+      return data
+    })
+  }
+
+  async createLessonProgress(lesson: CreateLesson, token?: string | null): Promise<Lesson> {
+    return this.withErrorHandling(async () => {
+      const client = await this.getClient(token)
+
+      // Get the user_id from the JWT claims
+      const { data: claims, error: claimsError } = await client.rpc('requesting_user_id')
+      if (claimsError) throw claimsError
+      if (!claims) throw new Error('No user ID found in JWT claims')
+
+      const { data, error } = await client
+        .from(this.table)
+        .insert({ ...lesson, user_id: claims })
+        .select()
+        .single()
+      
+      if (error) throw error
+      return data
+    })
+  }
+
+  async updateLessonProgress(
+    lessonId: string, 
+    updates: UpdateLesson, 
     token?: string | null
-  ): Promise<string> {
+  ): Promise<Lesson> {
     return this.withErrorHandling(async () => {
       const client = await this.getClient(token)
-      
-      const { data: claims } = await client.rpc('requesting_user_id')
-      if (!claims) throw new Error('No user ID found in JWT claims')
-
       const { data, error } = await client
-        .from(this.bodyMapTable)
-        .insert({
-          user_id: claims,
-          selections: selections,
-          location_score: score,
-          source: 'initial_exam',
-          source_id: 'primary'
+        .from(this.table)
+        .update({ 
+          ...updates, 
+          updated_at: new Date().toISOString() 
         })
-        .select()
-        .single()
-      
-      if (error) throw error
-      return data.id
-    })
-  }
-
-  async createExam(exam: CreateExamAttempt, token?: string | null): Promise<ExamAttempt> {
-    return this.withErrorHandling(async () => {
-      const client = await this.getClient(token)
-      
-      // Check if user already has a completed exam
-      const hasCompleted = await this.hasCompletedExam(token)
-      if (hasCompleted) {
-        throw new Error('User already has a completed initial exam')
-      }
-      
-      // Get the user_id from JWT claims
-      const { data: claims } = await client.rpc('requesting_user_id')
-      if (!claims) throw new Error('No user ID found in JWT claims')
-
-      const { data, error } = await client
-        .from(this.examTable)
-        .insert({ ...exam, user_id: claims })
+        .eq('id', lessonId)
         .select()
         .single()
       
@@ -521,855 +2250,128 @@ export class ExamService extends BaseService {
     })
   }
 
-  async getExam(examId: string, token?: string | null): Promise<ExamAttempt | null> {
+  async completeSlide(
+    lessonId: string,
+    slideId: string,
+    token?: string | null
+  ): Promise<Lesson> {
     return this.withErrorHandling(async () => {
       const client = await this.getClient(token)
-      const { data, error } = await client
-        .from(this.examTable)
-        .select('*, body_map_selections(*)')
-        .eq('id', examId)
-        .maybeSingle()
       
-      if (error) throw error
-      return data
-    })
-  }
+      // First get the current lesson to update completed slides
+      const { data: currentLesson, error: fetchError } = await client
+        .from(this.table)
+        .select('*')
+        .eq('id', lessonId)
+        .single()
 
-  async updateExam(examId: string, updates: UpdateExamAttempt, token?: string | null): Promise<ExamAttempt> {
-    return this.withErrorHandling(async () => {
-      // Check if exam is already completed
-      const exam = await this.getExam(examId, token)
-      if (exam?.is_completed) {
-        throw new Error('Cannot update a completed exam')
-      }
+      if (fetchError) throw fetchError
 
-      const client = await this.getClient(token)
+      const completedSlideIds = new Set([
+        ...currentLesson.completedSlideIds,
+        slideId
+      ])
+
+      // Calculate new progress
+      const totalSlides = currentLesson.slides.length
+      const progress = (completedSlideIds.size / totalSlides) * 100
+
+      // Update the lesson
       const { data, error } = await client
-        .from(this.examTable)
-        .update(updates)
-        .eq('id', examId)
+        .from(this.table)
+        .update({
+          completedSlideIds: Array.from(completedSlideIds),
+          progress,
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', lessonId)
         .select()
         .single()
-      
-      if (error) throw error
-      return data
-    })
-  }
 
-  async completeExam(examId: string, token?: string | null): Promise<ExamAttempt> {
-    return this.withErrorHandling(async () => {
-      // Check if user already has a completed exam
-      const hasCompleted = await this.hasCompletedExam(token)
-      if (hasCompleted) {
-        throw new Error('User already has a completed initial exam')
-      }
-
-      return this.updateExam(examId, { is_completed: true }, token)
-    })
-  }
-
-  async getLatestExam(token?: string | null): Promise<ExamAttempt | null> {
-    return this.withErrorHandling(async () => {
-      const client = await this.getClient(token)
-      const { data, error } = await client
-        .from(this.examTable)
-        .select('*, body_map_selections(*)')
-        .order('created_at', { ascending: false })
-        .limit(1)
-        .maybeSingle()
-      
       if (error) throw error
       return data
     })
   }
 }
 
-export const examService = new ExamService()
-
-================
-File: summary/page.tsx
-================
-import { SummarySlide } from '../ui/slides/summary'
-
-export default function SummaryPage() {
-  return <SummarySlide />
-}
+export const lessonService = new LessonService()
 
 ================
 File: types/db.types.ts
 ================
-export interface ExamAttempt {
-  id: string
-  user_id: string
-  safety_answers: Record<string, string>
-  treatment_answers: Record<string, string>
-  body_map_id: string
-  created_at: string
-  is_completed: boolean
-  body_map_selections?: BodyMapSelections
-}
-
-export interface BodyMapSelections {
-  id: string
-  user_id: string
-  selections: Record<string, boolean>
-  location_score: number
-  source: string
-  source_id: string
-  created_at: string
-}
+// /features/lessons/types/db.types.ts
+export interface LessonCompletion {
+    id: string
+    user_id: string
+    lesson_id: string
+    completed_at: string
+  }
   
-export type CreateExamAttempt = Omit<ExamAttempt, 'id' | 'created_at'> 
-export type UpdateExamAttempt = Partial<CreateExamAttempt>
+  export type CreateLessonCompletion = Pick<LessonCompletion, 'lesson_id'>
 
 ================
-File: types/index.ts
+File: types/lesson.types.ts
 ================
-export type ExamStep = 'body-map' | 'safety' | 'treatment' | 'review';
+// features/lessons/types/lesson.types.ts
 
-export interface SafetyQuestion {
-  id: string;
-  text: string;
-  subItems?: string[];
-  options: {
-    id: string;
-    text: string;
-  }[];
-}
-
-export interface TreatmentQuestion {
-  id: string;
-  text: string;
-  options: {
-    id: string;
-    text: string;
-  }[];
-}
-
-export interface ExamAnswers {
-  bodyMap: Record<string, boolean>;
-  safety: Record<string, string>;
-  treatment: Record<string, string>;
-}
-
-export type ExamAnswerTypes = keyof ExamAnswers;
-
-================
-File: ui/exam-container.tsx
-================
-//  /(features)/initial-exam/ui/exam-container.tsx
-
-'use client'
-
-import dynamic from 'next/dynamic'
-
-const DynamicExamContent = dynamic(
-  () => import('./exam-content'),
-  { ssr: false }
-)
-
-export function ExamContainer() {
-  return (
-    <div className="min-h-[100dvh] flex flex-col">
-      <DynamicExamContent />
-    </div>
-  )
-}
-
-================
-File: ui/exam-content.tsx
-================
-// src/(features)/initial-exam/ui/exam-content.tsx
-'use client'
-
-import { useAuth } from '@clerk/nextjs'
-import { SafetySlide } from "./slides/safety"
-import { TreatmentSlide } from "./slides/treatment"
-import { ReviewSlide } from "./slides/review"
-import { BodyMapSlide } from "./slides/body-map"
-import { ExamHeader } from "./exam-header"
-import { useExamStore } from "../model/exam-state"
-import { Loader2 } from "lucide-react"
-import { useRouter } from 'next/navigation'
-import { examContent } from "../data/mock-question-content"
-import { ExamAnswerTypes, ExamStep } from '../types'
-import { useErrorHandler } from '@/lib/errors/handlers'
-import { ContinueButton } from '../../shared/components/continue-button'
-
-export default function ExamContent() {
-  const router = useRouter()
-  const handleError = useErrorHandler()
-  const { getToken } = useAuth()
-  const { 
-    currentStep, 
-    answers, 
-    progress,
-    isSubmitting,
-    setAnswer, 
-    setCurrentStep,
-    isStepComplete,
-    updateProgress,
-    saveProgress,
-    submitExam,
-    cleanupExam
-  } = useExamStore()
-
-  const handleNext = async () => {
-    try {
-      console.log('handleNext called')
-      console.log('Current step:', currentStep)
-      console.log('Is step complete:', isStepComplete(currentStep))
-      console.log('Current answers:', answers)
-      
-      const token = await getToken({ template: 'supabase' })
-
-      if (currentStep === 'body-map' && isStepComplete('body-map')) {
-        console.log('Moving from body-map to safety')
-        await saveProgress(token)
-        updateProgress()
-        setCurrentStep('safety')
-      } else if (currentStep === 'safety' && isStepComplete('safety')) {
-        await saveProgress(token)
-        updateProgress()
-        setCurrentStep('treatment')
-      } else if (currentStep === 'treatment' && isStepComplete('treatment')) {
-        await saveProgress(token)
-        updateProgress()
-        setCurrentStep('review')
-      }
-    } catch (error) {
-      console.error('Error in handleNext:', error)
-      handleError(error)
-    }
+export interface BaseSlide {
+    id: string
+    type: SlideType
+    nextRoute?: string
   }
-
-  const handleSubmit = async () => {
-    try {
-      const token = await getToken({ template: 'supabase' })
-      await submitExam(token)
-      cleanupExam()
-      router.push('/initial-exam/summary')
-    } catch (error) {
-      handleError(error)
-    }
-  }
-
-  const handleEditSlide = (index: number) => {
-    const steps: ExamStep[] = ['body-map', 'safety', 'treatment']
-    setCurrentStep(steps[index])
-  }
-
-  // Add debugging output
-  console.log('Render state:', {
-    currentStep,
-    answers,
-    isStepComplete: isStepComplete(currentStep),
-    progress
-  })
-
-  return (
-    <div className="min-h-[100dvh] flex flex-col">
-      <ExamHeader progress={progress} />
-
-      <main className="flex-1 overflow-y-auto px-4 pb-20 pt-4">
-        <div className="max-w-2xl mx-auto space-y-6">
-          
-
-          {currentStep === 'body-map' && (
-            <BodyMapSlide
-              selectedParts={answers.bodyMap}
-              onPartSelect={(partId: string, selected: boolean) => {
-                console.log('Selecting part:', partId, selected);
-                setAnswer('bodyMap', partId, selected);
-                // Force check completion after setting answer
-                console.log('Checking completion after selection:', isStepComplete('body-map'));
-              }}
-            />
-          )}
-
-          {currentStep === 'safety' && (
-            <SafetySlide
-              questions={examContent.safety.questions}
-              answers={answers.safety}
-              onAnswer={(qId, aId) => setAnswer('safety', qId, aId)}
-              title={examContent.safety.title}
-              description={examContent.safety.description}
-            />
-          )}
-
-          {currentStep === 'treatment' && (
-            <TreatmentSlide
-              questions={examContent.treatment.questions}
-              answers={answers.treatment}
-              onAnswer={(qId, aId) => setAnswer('treatment', qId, aId)}
-              title={examContent.treatment.title}
-              description={examContent.treatment.description}
-            />
-          )}
-
-          {currentStep === 'review' && (
-            <ReviewSlide
-              answers={answers}
-              onEditSlide={handleEditSlide}
-              onSubmit={handleSubmit}
-            />
-          )}
-        </div>
-      </main>
-
-      {currentStep !== 'review' && (
-        <div className="fixed bottom-0 left-0 right-0 p-4 bg-white border-t">
-          <div className="max-w-2xl mx-auto">
-            {isSubmitting ? (
-              <div className="flex justify-center">
-                <Loader2 className="h-8 w-8 animate-spin" />
-              </div>
-            ) : (
-              <ContinueButton
-                onClick={() => {
-                  console.log('Continue button clicked')
-                  handleNext()
-                }}
-                disabled={!isStepComplete(currentStep)}
-              />
-            )}
-          </div>
-        </div>
-      )}
-    </div>
-  )
-}
-
-================
-File: ui/exam-header.tsx
-================
-'use client'
-
-import { Button } from "@/components/ui/button"
-import { Progress } from "@/components/ui/progress"
-import { ArrowLeft, RotateCcw } from 'lucide-react'
-import { useRouter } from 'next/navigation'
-import { useExamStore } from "../model/exam-state"
-
-interface ExamHeaderProps {
-  progress: number
-}
-
-export function ExamHeader({ progress }: ExamHeaderProps) {
-  const router = useRouter()
-  const resetExam = useExamStore(state => state.resetExam)
-
-  const handleReset = () => {
-    resetExam()
-    router.refresh()
-  }
-
-  return (
-    <header className="sticky top-0 z-50 bg-white border-b">
-      <div className="flex items-center justify-between px-4 py-3">
-        <Button 
-          variant="ghost" 
-          size="icon" 
-          className="text-gray-600"
-          onClick={() => router.back()}
-        >
-          <ArrowLeft className="h-5 w-5" />
-        </Button>
-
-        <div className="flex-1 mx-4">
-          <Progress value={progress} className="h-2" />
-        </div>
-
-        <div className="flex items-center gap-2">
-          <div className="font-semibold">
-            {progress}%
-          </div>
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={handleReset}
-            className="text-gray-600"
-          >
-            <RotateCcw className="h-5 w-5" />
-          </Button>
-        </div>
-      </div>
-    </header>
-  )
-}
-
-================
-File: ui/slides/body-map.tsx
-================
-// components/slides/body-map-slide.tsx
-'use client'
-
-import { forwardRef, useState } from 'react'
-import { MapPin } from 'lucide-react'
-import { Card } from "@/components/ui/card"
-import { BodyPartId } from '@/app/(features)/shared/components/body-map/shared-types'
-import { BaseMap } from '@/app/(features)/shared/components/body-map/base-map'
-
-interface BodyMapSlideProps {
-  selectedParts: Record<string, boolean>
-  onPartSelect: (partId: string, selected: boolean) => void
-}
-
-export const BodyMapSlide = forwardRef<HTMLDivElement, BodyMapSlideProps>(
-  function BodyMapSlide({ selectedParts, onPartSelect }, ref) {
-    const [totalScore, setTotalScore] = useState(0)
-    
-    const selectedLocations = Object.entries(selectedParts)
-      .filter(([selected]) => selected)
-      .map(([partId]) => partId as BodyPartId)
-
-    const handlePartSelect = (partId: string, selected: boolean, score: number) => {
-      onPartSelect(partId, selected)
-      setTotalScore(prev => selected ? prev + score : prev - score)
-    }
-
-    return (
-      <div ref={ref} className="space-y-4">
-        <Card className="p-6 space-y-2">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center space-x-4">
-              <MapPin size={32} className="text-cyan-600" />
-              <h2 className="text-2xl font-bold text-slate-800">Pain Location</h2>
-            </div>
-            {totalScore > 0 && (
-              <div className="text-sm text-slate-600">
-                Pain Score: {totalScore}
-              </div>
-            )}
-          </div>
-          
-          <p className="text-slate-600">
-            Please indicate where you experience pain by clicking on the body regions.
-          </p>
-
-          <BaseMap
-            selectedLocations={selectedLocations}
-            onSelect={handlePartSelect}
-          />
-        </Card>
-      </div>
-    )
-  }
-)
-
-================
-File: ui/slides/review.tsx
-================
-'use client'
-
-import { Card } from "@/components/ui/card"
-import { Button } from "@/components/ui/button"
-import { Check } from 'lucide-react'
-import { examContent } from '../../data/mock-question-content'
-import { ExamAnswers } from '../../types'
-import { ContinueButton } from '../../../shared/components/continue-button'
-import { frontBodyParts, backBodyParts } from '../../../shared/components/body-map/body-part'
-import { BaseMap } from '@/app/(features)/shared/components/body-map/base-map'
-import { BodyPartId } from '@/app/(features)/shared/components/body-map/shared-types'
-
-interface ReviewSlideProps {
-  answers: ExamAnswers
-  onEditSlide: (index: number) => void
-  onSubmit: () => void
-}
-
-function calculateTotalScore(selections: Record<string, boolean>): number {
-  const allBodyParts = [...frontBodyParts, ...backBodyParts]
-  return Object.entries(selections)
-    .filter(([selected]) => selected)
-    .reduce((total, [partId]) => {
-      const part = allBodyParts.find(p => p.id === partId)
-      return total + (part?.score || 0)
-    }, 0)
-}
-
-export function ReviewSlide({ 
-  answers,
-  onEditSlide,
-  onSubmit 
-}: ReviewSlideProps) {
-  const totalPainScore = calculateTotalScore(answers.bodyMap)
-  const selectedLocations = Object.entries(answers.bodyMap)
-    .filter(([, selected]) => selected)
-    .map(([partId]) => partId as BodyPartId)
-
-  return (
-    <Card className="p-6 space-y-6">
-      <div className="flex items-center space-x-4">
-        <Check className="h-8 w-8 text-green-600" />
-        <h2 className="text-2xl font-bold">Review Your Assessment</h2>
-      </div>
-
-      <div className="space-y-6">
-        {/* Body Map Section */}
-        <div className="bg-slate-50 p-4 rounded-lg space-y-4">
-          <div className="flex items-center justify-between mb-4">
-            <h3 className="font-semibold text-lg">Pain Location</h3>
-            <div className="flex items-center gap-4">
-              <div className="text-slate-600">
-                Pain Score: {totalPainScore}
-              </div>
-              <Button 
-                variant="ghost" 
-                size="sm" 
-                onClick={() => onEditSlide(0)}
-                className="text-cyan-600 hover:text-cyan-700"
-              >
-                Edit
-              </Button>
-            </div>
-          </div>
-
-          <BaseMap
-            selectedLocations={selectedLocations}
-            onSelect={() => {}}
-            readOnly={true}
-            className="max-w-2xl mx-auto"
-          />
-        </div>
-
-        {/* Safety Section */}
-        <div className="bg-slate-50 p-4 rounded-lg space-y-4">
-          <div className="flex items-center justify-between mb-4">
-            <h3 className="font-semibold text-lg">Safety Screening</h3>
-            <Button 
-              variant="ghost" 
-              size="sm" 
-              onClick={() => onEditSlide(1)}
-              className="text-cyan-600 hover:text-cyan-700"
-            >
-              Edit
-            </Button>
-          </div>
-          {examContent.safety.questions.map((question) => (
-            <div key={question.id} className="mb-4">
-              <div className="flex justify-between">
-                <div className="flex-1 mr-4">
-                  <p>{question.text}</p>
-                  {question.subItems && (
-                    <ul className="list-disc ml-4 mt-2">
-                      {question.subItems.map((item, i) => (
-                        <li key={i} className="text-slate-600">{item}</li>
-                      ))}
-                    </ul>
-                  )}
-                </div>
-                <div className="text-slate-600">{answers.safety[question.id]}</div>
-              </div>
-            </div>
-          ))}
-        </div>
-
-        {/* Treatment Section */}
-        <div className="bg-slate-50 p-4 rounded-lg space-y-4">
-          <div className="flex items-center justify-between mb-4">
-            <h3 className="font-semibold text-lg">Treatment Assessment</h3>
-            <Button 
-              variant="ghost" 
-              size="sm" 
-              onClick={() => onEditSlide(2)}
-              className="text-cyan-600 hover:text-cyan-700"
-            >
-              Edit
-            </Button>
-          </div>
-          {examContent.treatment.questions.map((question) => (
-            <div key={question.id} className="mb-4">
-              <div className="flex justify-between">
-                <div className="flex-1 mr-4">
-                  <p>{question.text}</p>
-                </div>
-                <div className="text-slate-600">{answers.treatment[question.id]}</div>
-              </div>
-            </div>
-          ))}
-        </div>
-
-        {/* Risk Warnings */}
-        {Object.values(answers.safety).includes('yes') && (
-          <div className="bg-red-50 text-red-600 p-4 rounded-lg border border-red-100">
-            Based on your answers, we recommend consulting a healthcare provider before proceeding.
-          </div>
-        )}
-      </div>
-
-      <div className="flex justify-center pt-4">
-        <ContinueButton 
-          onClick={onSubmit}
-          className="bg-green-600 hover:bg-green-700 dark:bg-green-600 dark:hover:bg-green-700 dark:text-white"
-        />
-      </div>
-    </Card>
-  )
-}
-
-================
-File: ui/slides/safety.tsx
-================
-'use client'
-
-import { Card } from "@/components/ui/card"
-import { Button } from "@/components/ui/button"
-import { SafetyQuestion } from "../../types"
-import { Shield } from "lucide-react"
-
-// src/(features)/initial-exam/ui/slides/safety.tsx
-interface SafetySlideProps {
-    questions: SafetyQuestion[]
-    answers: Record<string, string>
-    onAnswer: (questionId: string, answerId: string) => void
+  
+  export type SlideType = 'info' | 'question' | 'infoBullet'
+  
+  export interface InfoSlide extends BaseSlide {
+    type: 'info'
     title: string
-    description: string
+    body: string
+    imageUrl?: string
   }
   
-  export function SafetySlide({ 
-    questions, 
-    answers, 
-    onAnswer,
-    title,
-    description 
-  }: SafetySlideProps) {
-    return (
-      <Card className="p-6 space-y-6">
-        <div className="flex items-center space-x-4">
-          <Shield className="h-8 w-8 text-primary" />
-          <div>
-            <h2 className="text-2xl font-bold">{title}</h2>
-            <p className="text-muted-foreground">
-              {description}
-            </p>
-          </div>
-        </div>
-      <div className="space-y-4">
-        {questions.map((question) => (
-          <div key={question.id} className="space-y-2">
-            <p className="font-medium">{question.text}</p>
-            
-            {question.subItems && (
-              <ul className="ml-4 space-y-1 text-sm text-muted-foreground">
-                {question.subItems.map((item, i) => (
-                  <li key={i}>{item}</li>
-                ))}
-              </ul>
-            )}
-
-            <div className="flex gap-2">
-              {question.options.map((option) => (
-                <Button
-                  key={option.id}
-                  variant={answers[question.id] === option.id ? "default" : "outline"}
-                  onClick={() => onAnswer(question.id, option.id)}
-                >
-                  {option.text}
-                </Button>
-              ))}
-            </div>
-          </div>
-        ))}
-      </div>
-    </Card>
-  )
-}
-
-================
-File: ui/slides/summary.tsx
-================
-// src/(features)/initial-exam/ui/slides/summary-slide.tsx
-'use client'
-
-import { Card } from "@/components/ui/card"
-import { Button } from "@/components/ui/button"
-import { CheckCircle, Loader2 } from 'lucide-react'
-import { useRouter } from 'next/navigation'
-import { examContent } from '../../data/mock-question-content'
-import { useAuth } from '@clerk/nextjs'
-import { examService } from '../../services/exam.service'
-import { useEffect, useState } from 'react'
-import { ExamAttempt } from '../../types/db.types'
-import { useErrorHandler } from '@/lib/errors/handlers'
-import { useExamStore } from '../../model/exam-state'
-import { ContinueButton } from '../../../shared/components/continue-button'
-
-export function SummarySlide() {
-  const router = useRouter()
-  const { getToken } = useAuth()
-  const handleError = useErrorHandler()
-  const [exam, setExam] = useState<ExamAttempt | null>(null)
-  const [isLoading, setIsLoading] = useState(true)
-
-  useEffect(() => {
-    // Reset the exam store completely when summary mounts
-    useExamStore.getState().resetExam()
-  }, [])
-
-  useEffect(() => {
-    const fetchExam = async () => {
-      try {
-        const token = await getToken({ template: 'supabase' })
-        const latestExam = await examService.getLatestExam(token)
-        setExam(latestExam)
-      } catch (error) {
-        handleError(error)
-      } finally {
-        setIsLoading(false)
-      }
-    }
-
-    fetchExam()
-  }, [getToken, handleError])
-
-  if (isLoading) {
-    return (
-      <Card className="p-6 flex justify-center items-center">
-        <Loader2 className="h-8 w-8 animate-spin" />
-      </Card>
-    )
+  export interface QuestionSlide extends BaseSlide {
+    type: 'question'
+    question: string
+    options: QuestionOption[]
+    explanation?: string
+    imageUrl?: string
   }
-
-  if (!exam) {
-    return (
-      <Card className="p-6">
-        <div className="text-center">
-          <p>No exam data found.</p>
-          <Button onClick={() => router.push('/')} className="mt-4">
-            Return Home
-          </Button>
-        </div>
-      </Card>
-    )
-  }
-
-  // Calculate any risk factors
-  const hasRiskFactors = Object.values(exam.safety_answers).includes('yes')
-
-  return (
-    <Card className="p-6 space-y-6">
-      <div className="flex items-center space-x-4">
-        <CheckCircle className="h-8 w-8 text-green-600" />
-        <h2 className="text-2xl font-bold">Assessment Complete</h2>
-      </div>
-
-      <div className="space-y-6">
-        {/* Safety Summary */}
-        <div className="bg-slate-50 p-4 rounded-lg space-y-4">
-          <h3 className="font-semibold text-lg">Safety Screening</h3>
-          {examContent.safety.questions.map((question) => (
-            <div key={question.id} className="mb-4">
-              <div className="flex justify-between">
-                <div className="flex-1 mr-4">
-                  <p>{question.text}</p>
-                  {question.subItems && (
-                    <ul className="list-disc ml-4 mt-2">
-                      {question.subItems.map((item, i) => (
-                        <li key={i} className="text-slate-600">{item}</li>
-                      ))}
-                    </ul>
-                  )}
-                </div>
-                <div className="text-slate-600">{exam.safety_answers[question.id]}</div>
-              </div>
-            </div>
-          ))}
-        </div>
-
-        {/* Treatment Summary */}
-        <div className="bg-slate-50 p-4 rounded-lg space-y-4">
-          <h3 className="font-semibold text-lg">Treatment Assessment</h3>
-          {examContent.treatment.questions.map((question) => (
-            <div key={question.id} className="mb-4">
-              <div className="flex justify-between">
-                <div className="flex-1 mr-4">
-                  <p>{question.text}</p>
-                </div>
-                <div className="text-slate-600">{exam.treatment_answers[question.id]}</div>
-              </div>
-            </div>
-          ))}
-        </div>
-
-        {/* Risk Warning */}
-        {hasRiskFactors && (
-          <div className="bg-red-50 text-red-600 p-4 rounded-lg border border-red-100">
-            Based on your answers, we recommend consulting a healthcare provider before proceeding.
-          </div>
-        )}
-      </div>
-
-      <div className="flex justify-center pt-4">
-        <ContinueButton 
-          onClick={() => router.push('/')}
-          className="bg-cyan-600 hover:bg-cyan-700 dark:bg-cyan-600 dark:hover:bg-cyan-700 dark:text-white"
-          text="Continue to Dashboard"
-        />
-      </div>
-    </Card>
-  )
-}
-
-================
-File: ui/slides/treatment.tsx
-================
-'use client'
-
-import { Card } from "@/components/ui/card"
-import { Button } from "@/components/ui/button"
-import { TreatmentQuestion } from "../../types"
-import { Clipboard } from "lucide-react"
-
-interface TreatmentSlideProps {
-    questions: TreatmentQuestion[]
-    answers: Record<string, string>
-    onAnswer: (questionId: string, answerId: string) => void
+  
+  export interface InfoBulletSlide extends BaseSlide {
+    type: 'infoBullet'
     title: string
-    description: string
+    introduction?: string
+    bullets: BulletPoint[]
+    imageUrl?: string
   }
   
-  export function TreatmentSlide({ 
-    questions, 
-    answers, 
-    onAnswer,
-    title,
-    description
-  }: TreatmentSlideProps) {
-    return (
-      <Card className="p-6 space-y-6">
-        <div className="flex items-center space-x-4">
-          <Clipboard className="h-8 w-8 text-primary" />
-          <div>
-            <h2 className="text-2xl font-bold">{title}</h2>
-            <p className="text-muted-foreground">
-              {description}
-            </p>
-          </div>
-        </div>
-
-      <div className="space-y-4">
-        {questions.map((question) => (
-          <div key={question.id} className="space-y-2">
-            <p className="font-medium">{question.text}</p>
-            
-            <div className="flex gap-2">
-              {question.options.map((option) => (
-                <Button
-                  key={option.id}
-                  variant={answers[question.id] === option.id ? "default" : "outline"}
-                  onClick={() => onAnswer(question.id, option.id)}
-                >
-                  {option.text}
-                </Button>
-              ))}
-            </div>
-          </div>
-        ))}
-      </div>
-    </Card>
-  )
-}
+  export interface QuestionOption {
+    id: string
+    text: string
+    isCorrect: boolean
+  }
+  
+  export interface BulletPoint {
+    text: string
+  }
+  
+  export type Slide = InfoSlide | QuestionSlide | InfoBulletSlide
+  
+  export interface Lesson {
+    id: string
+    title: string
+    description?: string
+    slides: Slide[]
+    progress: number
+    currentSlideIndex: number
+    completedSlideIds: string[]
+    createdAt: string
+    updatedAt: string
+    userId: string
+  }
+  
+  export type CreateLesson = Omit<Lesson, 'id' | 'createdAt' | 'updatedAt'>
+  export type UpdateLesson = Partial<Omit<Lesson, 'id' | 'userId' | 'createdAt' | 'updatedAt'>>
 
 
 
