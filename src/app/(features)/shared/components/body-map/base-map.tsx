@@ -47,7 +47,8 @@ export function BaseMap({ selectedLocations, onSelect, className, readOnly = fal
 
   return (
     <div className={className}>
-      <div className={`flex justify-center lg:hidden mb-4 ${readOnly ? 'hidden' : ''}`}>
+      {/* Remove the conditional hiding of the checkbox in mobile view */}
+      <div className="flex justify-center lg:hidden mb-4">
         <div className="flex items-center space-x-2">
           <span className="text-sm text-slate-600">Back View</span>
           <input 
@@ -55,7 +56,6 @@ export function BaseMap({ selectedLocations, onSelect, className, readOnly = fal
             checked={isBackView}
             onChange={() => toggleView()}
             className="rounded border-gray-300"
-            disabled={readOnly}
           />
           <span className="text-sm text-slate-600">Front View</span>
         </div>
