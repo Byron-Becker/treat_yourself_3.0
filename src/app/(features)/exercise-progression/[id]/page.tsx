@@ -4,13 +4,14 @@ import { notFound } from 'next/navigation'
 import { Metadata } from 'next'
 
 interface PageProps {
-  params: {
+  params: Promise<{
     id: string
-  }
+  }>
 }
 
 export default async function ExercisePage({ params }: PageProps) {
-  const exercise = await exercises[params.id]
+  const { id } = await params
+  const exercise = exercises[id]
 
   if (!exercise) {
     notFound()
@@ -21,7 +22,8 @@ export default async function ExercisePage({ params }: PageProps) {
 
 // Generate metadata for the page
 export async function generateMetadata({ params }: PageProps): Promise<Metadata> {
-  const exercise = exercises[params.id]
+  const { id } = await params
+  const exercise = exercises[id]
 
   if (!exercise) {
     return {
