@@ -9,9 +9,14 @@ export async function saveExamAnswers(
   token: string | null
 ) {
   try {
+    // First save body map selections
+    const bodyMapId = await examService.createBodyMapSelection(answers.bodyMap, token)
+
+    // Then create exam with body map reference
     return await examService.createExam({
       safety_answers: answers.safety,
       treatment_answers: answers.treatment,
+      body_map_id: bodyMapId,
       is_completed: false,
       user_id: '', // Will be set by service from JWT
     }, token)
