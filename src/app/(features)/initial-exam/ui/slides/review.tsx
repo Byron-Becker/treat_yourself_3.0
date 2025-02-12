@@ -9,6 +9,7 @@ import { ContinueButton } from '../../../shared/components/continue-button'
 import { frontBodyParts, backBodyParts } from '../../../shared/components/body-map/body-part'
 import { BaseMap } from '@/app/(features)/shared/components/body-map/base-map'
 import { BodyPartId } from '@/app/(features)/shared/components/body-map/shared-types'
+import { useToast } from "@/hooks/use-toast"
 
 interface ReviewSlideProps {
   answers: ExamAnswers
@@ -31,10 +32,31 @@ export function ReviewSlide({
   onEditSlide,
   onSubmit 
 }: ReviewSlideProps) {
+  const { toast } = useToast()
   const totalPainScore = calculateTotalScore(answers.bodyMap)
   const selectedLocations = Object.entries(answers.bodyMap)
     .filter(([, selected]) => selected)
     .map(([partId]) => partId as BodyPartId)
+
+  const handleSubmit = async () => {
+    try {
+      await onSubmit()
+    } catch (error) {
+      if (error instanceof Error && error.message.includes('already has a completed initial exam')) {
+        toast({
+          title: "Already Completed",
+          description: "You have already completed your initial exam. You cannot submit another one.",
+          variant: "destructive"
+        })
+      } else {
+        toast({
+          title: "Error",
+          description: "An error occurred while submitting your exam. Please try again.",
+          variant: "destructive"
+        })
+      }
+    }
+  }
 
   return (
     <Card className="p-6 space-y-6">
@@ -138,7 +160,7 @@ export function ReviewSlide({
 
       <div className="flex justify-center pt-4">
         <ContinueButton 
-          onClick={onSubmit}
+          onClick={handleSubmit}
           className="bg-green-600 hover:bg-green-700 dark:bg-green-600 dark:hover:bg-green-700 dark:text-white"
         />
       </div>

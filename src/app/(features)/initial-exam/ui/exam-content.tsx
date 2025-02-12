@@ -11,7 +11,7 @@ import { useExamStore } from "../model/exam-state"
 import { Loader2 } from "lucide-react"
 import { useRouter } from 'next/navigation'
 import { examContent } from "../data/mock-question-content"
-import { ExamAnswerTypes, ExamStep } from '../types'
+import { ExamStep } from '../types'
 import { useErrorHandler } from '@/lib/errors/handlers'
 import { ContinueButton } from '../../shared/components/continue-button'
 
@@ -92,21 +92,7 @@ export default function ExamContent() {
 
       <main className="flex-1 overflow-y-auto px-4 pb-20 pt-4">
         <div className="max-w-2xl mx-auto space-y-6">
-          {/* Debug button in development */}
-          {process.env.NODE_ENV === 'development' && (
-            <button
-              onClick={() => {
-                console.log('Debug button clicked');
-                console.log('Current step:', currentStep);
-                console.log('Step complete?', isStepComplete(currentStep));
-                console.log('Full answers:', answers);
-                console.log('Current answers:', answers[currentStep as ExamAnswerTypes]);
-              }}
-              className="p-2 bg-gray-200 rounded text-sm"
-            >
-              Debug State
-            </button>
-          )}
+          
 
           {currentStep === 'body-map' && (
             <BodyMapSlide

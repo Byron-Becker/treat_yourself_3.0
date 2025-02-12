@@ -20,6 +20,12 @@ export async function saveExamAnswers(
   token: string | null
 ) {
   try {
+    // First check if user already has a completed exam
+    const hasCompleted = await examService.hasCompletedExam(token)
+    if (hasCompleted) {
+      throw new Error('User already has a completed initial exam')
+    }
+
     // Calculate body map score
     const score = calculateTotalScore(answers.bodyMap)
 

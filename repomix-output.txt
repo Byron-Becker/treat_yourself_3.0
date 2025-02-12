@@ -45,573 +45,474 @@ Additional Info:
 ================================================================
 Directory Structure
 ================================================================
-errors/base.ts
-errors/codes.ts
-errors/handlers.ts
-supabase/client-singleton.ts
-supabase/client-ssr.ts
-supabase/errors/supabase.ts
-supabase/hooks/example-hook.ts
-supabase/README-supa.md
-supabase/services/base.ts
-supabase/services/example-service.ts
-supabase/setup-auth-db.md
-supabase/types/example-types.ts
+api/actions.ts
+data/mock-question-content.ts
+layout.tsx
+model/exam-state.ts
+page.tsx
+services/exam.service.ts
+summary/page.tsx
+types/db.types.ts
+types/index.ts
+ui/exam-container.tsx
+ui/exam-content.tsx
+ui/exam-header.tsx
+ui/slides/body-map.tsx
+ui/slides/review.tsx
+ui/slides/safety.tsx
+ui/slides/summary.tsx
+ui/slides/treatment.tsx
 
 ================================================================
 Files
 ================================================================
 
 ================
-File: errors/base.ts
+File: api/actions.ts
 ================
-import { ErrorCode } from './codes'
+'use server'
 
-export class AppError extends Error {
-  constructor(
-    message: string,
-    public code: ErrorCode,
-    public status: number = 500,
-    public details?: unknown,
-    public timestamp: Date = new Date()
-  ) {
-    super(message)
-    this.name = 'AppError'
-    // Maintains proper stack trace for where error was thrown (if available)
-    if (Error.captureStackTrace && typeof Error.captureStackTrace === 'function') {
-      Error.captureStackTrace(this, this.constructor)
-    } else {
-      this.stack = new Error().stack
-    }
-  }
+import { examService } from '../services/exam.service'
+import { ExamAnswers } from '../types'
+import { NotFoundError } from '@/lib/errors/base'
+import { frontBodyParts, backBodyParts } from '@/app/(features)/shared/components/body-map/body-part'
 
-  toJSON() {
-    return {
-      name: this.name,
-      message: this.message,
-      code: this.code,
-      status: this.status,
-      details: this.details,
-      timestamp: this.timestamp,
-      stack: this.stack
-    }
-  }
+function calculateTotalScore(selections: Record<string, boolean>): number {
+  const allBodyParts = [...frontBodyParts, ...backBodyParts]
+  return Object.entries(selections)
+    .filter(([selected]) => selected)
+    .reduce((total, [partId]) => {
+      const part = allBodyParts.find(p => p.id === partId)
+      return total + (part?.score || 0)
+    }, 0)
 }
 
-export class ValidationError extends AppError {
-  constructor(message: string, details?: unknown) {
-    super(message, ErrorCode.VALIDATION_ERROR, 400, details)
-    this.name = 'ValidationError'
-  }
-}
+export async function saveExamAnswers(
+  answers: ExamAnswers,
+  token: string | null
+) {
+  try {
+    // Calculate body map score
+    const score = calculateTotalScore(answers.bodyMap)
 
-export class AuthError extends AppError {
-  constructor(message: string, details?: unknown) {
-    super(message, ErrorCode.AUTH_ERROR, 401, details)
-    this.name = 'AuthError'
-  }
-}
+    // First save body map with score
+    const bodyMapId = await examService.createBodyMapSelection(
+      answers.bodyMap,
+      score,
+      token
+    )
 
-export class NotFoundError extends AppError {
-  constructor(message: string, details?: unknown) {
-    super(message, ErrorCode.NOT_FOUND, 404, details)
-    this.name = 'NotFoundError'
+    // Then create exam with all data at once
+    return await examService.createExam({
+      safety_answers: answers.safety,
+      treatment_answers: answers.treatment,
+      body_map_id: bodyMapId,
+      is_completed: true, // Set to true since this is the final submission
+      user_id: '', // Will be set by service from JWT
+    }, token)
+  } catch (error) {
+    console.error('Error saving exam answers:', error)
+    throw error
   }
 }
 
-export class NetworkError extends AppError {
-  constructor(message: string, details?: unknown) {
-    super(message, ErrorCode.NETWORK_ERROR, 503, details)
-    this.name = 'NetworkError'
-  }
-}
+// Remove updateExamAnswers since we don't want partial saves
 
-export const isAppError = (error: unknown): error is AppError => {
-  return error instanceof AppError
-}
-
-================
-File: errors/codes.ts
-================
-export enum ErrorCode {
-  // Authentication & Authorization
-  AUTH_ERROR = 'AUTH_ERROR',
-  UNAUTHORIZED = 'UNAUTHORIZED',
-  FORBIDDEN = 'FORBIDDEN',
-  TOKEN_EXPIRED = 'TOKEN_EXPIRED',
-  
-  // Validation & Data
-  VALIDATION_ERROR = 'VALIDATION_ERROR',
-  INVALID_INPUT = 'INVALID_INPUT',
-  NOT_FOUND = 'NOT_FOUND',
-  DUPLICATE_ENTRY = 'DUPLICATE_ENTRY',
-  
-  // Network & External Services
-  NETWORK_ERROR = 'NETWORK_ERROR',
-  API_ERROR = 'API_ERROR',
-  SERVICE_UNAVAILABLE = 'SERVICE_UNAVAILABLE',
-  TIMEOUT = 'TIMEOUT',
-  
-  // Database
-  DB_ERROR = 'DB_ERROR',
-  QUERY_ERROR = 'QUERY_ERROR',
-  
-  // Application
-  UNKNOWN_ERROR = 'UNKNOWN_ERROR',
-  INTERNAL_ERROR = 'INTERNAL_ERROR',
-  NOT_IMPLEMENTED = 'NOT_IMPLEMENTED'
-}
-
-================
-File: errors/handlers.ts
-================
-import { type ToastProps } from '@/components/ui/toast'
-import { useToast } from '@/hooks/use-toast'
-import { AppError } from './base'
-import { ErrorCode } from './codes'
-
-interface ErrorToastConfig {
-  [key: string]: {
-    title: string
-    variant: ToastProps['variant']
-  }
-}
-
-const ERROR_TOAST_CONFIG: ErrorToastConfig = {
-  [ErrorCode.AUTH_ERROR]: {
-    title: 'Authentication Error',
-    variant: 'destructive',
-  },
-  [ErrorCode.VALIDATION_ERROR]: {
-    title: 'Validation Error',
-    variant: 'destructive',
-  },
-  [ErrorCode.NETWORK_ERROR]: {
-    title: 'Network Error',
-    variant: 'destructive',
-  },
-  [ErrorCode.NOT_FOUND]: {
-    title: 'Not Found',
-    variant: 'destructive',
-  },
-  DEFAULT: {
-    title: 'Error',
-    variant: 'destructive',
-  },
-}
-
-export function logError(error: unknown) {
-  if (error instanceof AppError) {
-    console.error(`[${error.code}] ${error.message}`, {
-      details: error.details,
-      timestamp: error.timestamp,
-      stack: error.stack,
-    })
-  } else {
-    console.error('Unhandled error:', error)
-  }
-}
-
-export function useErrorHandler() {
-  const { toast } = useToast()
-
-  return (error: unknown) => {
-    // Log the error
-    logError(error)
-
-    // Show toast notification
-    if (error instanceof AppError) {
-      const config = ERROR_TOAST_CONFIG[error.code] || ERROR_TOAST_CONFIG.DEFAULT
-      toast({
-        title: config.title,
-        description: error.message,
-        variant: config.variant,
-      })
-      return
+export async function completeExam(
+  examId: string,
+  token: string | null
+) {
+  try {
+    const exam = await examService.getExam(examId, token)
+    if (!exam) {
+      throw new NotFoundError('Exam not found')
     }
 
-    // Handle unknown errors
-    toast({
-      title: ERROR_TOAST_CONFIG.DEFAULT.title,
-      description: 'An unexpected error occurred',
-      variant: 'destructive',
-    })
+    return await examService.completeExam(examId, token)
+  } catch (error) {
+    console.error('Error completing exam:', error)
+    throw error
   }
 }
 
-// API error handler middleware
-export async function apiErrorHandler(error: unknown) {
-  if (error instanceof AppError) {
-    return new Response(JSON.stringify(error.toJSON()), {
-      status: error.status,
-      headers: { 'Content-Type': 'application/json' },
-    })
-  }
-
-  const appError = new AppError(
-    'An unexpected error occurred',
-    ErrorCode.INTERNAL_ERROR,
-    500,
-    error
-  )
-  
-  return new Response(JSON.stringify(appError.toJSON()), {
-    status: 500,
-    headers: { 'Content-Type': 'application/json' },
-  })
-}
-
 ================
-File: supabase/client-singleton.ts
+File: data/mock-question-content.ts
 ================
-import { createClient, SupabaseClient } from '@supabase/supabase-js'
-
-class SupabaseClientSingleton {
-  private static instance: SupabaseClient | null = null
-  private static currentToken: string | null = null
-
-  private constructor() {}
-
-  static async getInstance(token?: string | null): Promise<SupabaseClient> {
-    try {
-      // If instance exists and token hasn't changed, return existing instance
-      if (this.instance && token === this.currentToken) {
-        return this.instance
-      }
-
-      // Create new instance with updated token
-      this.currentToken = token || null
-      this.instance = createClient(
-        process.env.NEXT_PUBLIC_SUPABASE_URL!,
-        process.env.NEXT_PUBLIC_SUPABASE_KEY!,
+export const examContent = {
+    safety: {
+      title: "Safety Screening",
+      description: "Please answer these safety questions to ensure this program is right for you.",
+      questions: [
         {
-          global: {
-            headers: token ? {
-              Authorization: `Bearer ${token}`
-            } : {}
+          id: 'severe-leg-pain',
+          text: 'Do you have ALL of the following:',
+          subItems: [
+            'Severe leg pain below the knee',
+            'Weakness, numbness, or pins and needles in foot/toes'
+          ],
+          options: [
+            { id: 'yes', text: 'Yes' },
+            { id: 'no', text: 'No' }
+          ]
+        },
+        {
+          id: 'recent-accident',
+          text: 'Have you developed low back problems following a recent severe accident?',
+          options: [
+            { id: 'yes', text: 'Yes' },
+            { id: 'no', text: 'No' }
+          ]
+        },
+        {
+          id: 'bladder-issues',
+          text: 'Have you developed any bladder problems following a recent severe episode of low back pain?',
+          options: [
+            { id: 'yes', text: 'Yes' },
+            { id: 'no', text: 'No' }
+          ]
+        }
+      ]
+    },
+    treatment: {
+      title: "Treatment Assessment",
+      description: "Please answer the following questions about your condition.",
+      questions: [
+        {
+          id: 'pain-free-periods',
+          text: 'Are there periods in the day when you have no pain? Even ten minutes?',
+          options: [
+            { id: 'yes', text: 'Yes' },
+            { id: 'no', text: 'No' }
+          ]
+        },
+        {
+          id: 'pain-above-knee',
+          text: 'Is the pain confined to areas above the knee?',
+          options: [
+            { id: 'yes', text: 'Yes' },
+            { id: 'no', text: 'No' }
+          ]
+        },
+        {
+          id: 'worse-sitting',
+          text: 'Are you generally worse when sitting for prolonged periods or on rising from the sitting position?',
+          options: [
+            { id: 'yes', text: 'Yes' },
+            { id: 'no', text: 'No' }
+          ]
+        }
+      ]
+    }
+  }
+
+================
+File: layout.tsx
+================
+'use client'
+
+import { ReactNode } from 'react'
+import { UserButton } from '@clerk/nextjs'
+
+export default function ExamLayout({ children }: { children: ReactNode }) {
+  return (
+    <div className="min-h-screen bg-slate-50">
+      <div className="absolute top-5 right-4 z-50">
+        <UserButton />
+      </div>
+      {children}
+    </div>
+  )
+}
+
+================
+File: model/exam-state.ts
+================
+// src/(features)/initial-exam/model/exam-state.ts
+import { create } from 'zustand'
+import { devtools, persist } from 'zustand/middleware'
+import { ExamAnswers, ExamStep, ExamAnswerTypes } from '../types'
+import { saveExamAnswers } from '../api/actions'
+
+interface ExamState {
+  examId: string | null
+  currentStep: ExamStep
+  answers: ExamAnswers
+  progress: number
+  isSubmitting: boolean
+  error: Error | null
+  setCurrentStep: (step: ExamStep) => void
+  setAnswer: (step: ExamAnswerTypes, questionId: string, answerId: string | boolean) => void
+  isStepComplete: (step: ExamStep) => boolean
+  updateProgress: () => void
+  resetExam: () => void
+  cleanupExam: () => void
+  saveProgress: (token: string | null) => Promise<void>
+  submitExam: (token: string | null) => Promise<void>
+}
+
+export const useExamStore = create<ExamState>()(
+  devtools(
+    persist(
+      (set, get) => ({
+        examId: null,
+        currentStep: 'body-map',
+        progress: 0,
+        answers: {
+          bodyMap: {},
+          safety: {},
+          treatment: {}
+        },
+        isSubmitting: false,
+        error: null,
+        
+        setCurrentStep: (step) => 
+          set(
+            { currentStep: step },
+            false,
+            'exam/setCurrentStep'
+          ),
+        
+        setAnswer: (step, questionId, answerId) => 
+          set(
+            (state) => {
+              if (!state.answers) {
+                return {
+                  answers: {
+                    bodyMap: {},
+                    safety: {},
+                    treatment: {},
+                    [step]: { [questionId]: answerId }
+                  }
+                }
+              }
+
+              return {
+                answers: {
+                  ...state.answers,
+                  [step]: {
+                    ...(state.answers[step] || {}),
+                    [questionId]: answerId
+                  }
+                }
+              }
+            },
+            false,
+            'exam/setAnswer'
+          ),
+
+        isStepComplete: (step) => {
+          console.log('isStepComplete called for step:', step);
+          
+          if (step === 'review') {
+            console.log('Review step - always complete');
+            return true;
+          }
+          
+          const { answers } = get()
+          console.log('Current answers:', answers);
+          
+          if (!answers) {
+            console.log('No answers object found');
+            return false;
+          }
+
+          // Convert body-map to bodyMap for accessing the answers object
+          const answerKey = step === 'body-map' ? 'bodyMap' : step;
+          const currentAnswers = answers[answerKey as ExamAnswerTypes];
+          console.log('Current step answers:', currentAnswers);
+          
+          if (!currentAnswers) {
+            console.log('No answers for current step');
+            return false;
+          }
+
+          if (step === 'body-map') {
+            console.log('Checking body map completion');
+            console.log('Body map answers:', currentAnswers);
+            // Check if any body part is selected (true)
+            const selectedParts = Object.entries(currentAnswers)
+              .filter(([, selected]) => selected === true);
+            console.log('Selected parts:', selectedParts);
+            const isComplete = selectedParts.length > 0;
+            console.log('Body map complete?', isComplete);
+            return isComplete;
+          }
+          
+          const numAnswers = Object.keys(currentAnswers).length;
+          console.log(`Number of answers for ${step}:`, numAnswers);
+          const isComplete = numAnswers > 0;
+          console.log(`${step} complete?`, isComplete);
+          return isComplete;
+        },
+
+        updateProgress: () => {
+          const { answers } = get()
+          const totalQuestions = 7
+          const answeredQuestions = 
+            (Object.values(answers.bodyMap).some(selected => selected === true) ? 1 : 0) +
+            Object.keys(answers.safety).length + 
+            Object.keys(answers.treatment).length
+          const progress = Math.round((answeredQuestions / totalQuestions) * 100)
+          set({ progress }, false, 'exam/updateProgress')
+        },
+
+        resetExam: () => set(
+          {
+            examId: null,
+            currentStep: 'body-map',
+            answers: { bodyMap: {}, safety: {}, treatment: {} },
+            progress: 0,
+            error: null
           },
-          auth: {
-            persistSession: false
+          false,
+          'exam/reset'
+        ),
+
+        cleanupExam: () => set(
+          {
+            examId: null,
+            answers: { bodyMap: {}, safety: {}, treatment: {} },
+            progress: 0,
+            error: null
+          },
+          false,
+          'exam/cleanup'
+        ),
+
+        saveProgress: async () => {
+          try {
+            set({ isSubmitting: true, error: null })
+            // Store answers in state but don't save to database yet
+            set({ error: null })
+          } catch (error) {
+            set({ error: error as Error })
+            throw error
+          } finally {
+            set({ isSubmitting: false })
+          }
+        },
+
+        submitExam: async (token: string | null) => {
+          try {
+            set({ isSubmitting: true, error: null })
+            const { answers } = get()
+            
+            // Save everything at once when submitting
+            const result = await saveExamAnswers(answers, token)
+            set({ examId: result.id })
+          } catch (error) {
+            set({ error: error as Error })
+            throw error
+          } finally {
+            set({ isSubmitting: false })
           }
         }
-      )
-
-      return this.instance
-    } catch (error) {
-      console.error('Error getting Supabase instance:', error)
-      throw error
-    }
-  }
-
-  static resetInstance(): void {
-    this.instance = null
-    this.currentToken = null
-  }
-}
-
-export default SupabaseClientSingleton
-
-================
-File: supabase/client-ssr.ts
-================
-import { auth } from '@clerk/nextjs/server'
-import { createClient } from '@supabase/supabase-js'
-
-export async function createClerkSupabaseClientSsr() {
-  // The `useAuth()` hook is used to access the `getToken()` method
-  const { getToken } = await auth()
-
-  return createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_KEY!,
-    {
-      global: {
-        // Get the custom Supabase token from Clerk
-        fetch: async (url, options = {}) => {
-          const clerkToken = await getToken({
-            template: 'supabase',
-          })
-
-          // Insert the Clerk Supabase token into the headers
-          const headers = new Headers(options?.headers)
-          headers.set('Authorization', `Bearer ${clerkToken}`)
-
-          // Now call the default fetch
-          return fetch(url, {
-            ...options,
-            headers,
-          })
-        },
-      },
-    },
+      }),
+      {
+        name: 'exam-storage',
+        partialize: (state) => ({
+          examId: state.examId,
+          answers: state.answers || { bodyMap: {}, safety: {}, treatment: {} },
+          currentStep: state.currentStep || 'body-map',
+          progress: state.progress || 0
+        }),
+        onRehydrateStorage: () => (state) => {
+          if (!state) return;
+          
+          // Ensure answers object exists with all required properties
+          if (!state.answers) {
+            state.answers = { bodyMap: {}, safety: {}, treatment: {} };
+          } else {
+            // Ensure each section exists
+            if (!state.answers.bodyMap) state.answers.bodyMap = {};
+            if (!state.answers.safety) state.answers.safety = {};
+            if (!state.answers.treatment) state.answers.treatment = {};
+          }
+        }
+      }
+    )
   )
+)
+
+================
+File: page.tsx
+================
+import { ExamContainer } from './ui/exam-container'
+
+export default function ExamPage() {
+  return <ExamContainer />
 }
 
 ================
-File: supabase/errors/supabase.ts
+File: services/exam.service.ts
 ================
-// src/lib/supabase/errors/supabase.ts
+import { BaseService } from '@/lib/supabase/services/base'
+import type { ExamAttempt, CreateExamAttempt, UpdateExamAttempt } from '../types/db.types'
 
-export class SupabaseError extends Error {
-    constructor(
-      message: string,
-      public code: string,
-      public status?: number,
-      public details?: unknown
-    ) {
-      super(message)
-      this.name = 'SupabaseError'
-    }
-  
-    static fromError(error: unknown): SupabaseError {
-      if (error instanceof SupabaseError) {
-        return error
-      }
-  
-      // PostgreSQL error codes
-      const pgErrorCodes = {
-        '23505': 'UNIQUE_VIOLATION',
-        '23503': 'FOREIGN_KEY_VIOLATION',
-        '42P01': 'UNDEFINED_TABLE',
-      }
-  
-      // Handle Supabase errors
-      if (error && typeof error === 'object' && 'code' in error) {
-        const code = error.code as string
-        const message = 'message' in error ? String(error.message) : 'Unknown error'
-        const status = 'status' in error ? Number(error.status) : undefined
-        
-        return new SupabaseError(
-          message,
-          pgErrorCodes[code as keyof typeof pgErrorCodes] || code,
-          status,
-          error
-        )
-      }
-  
-      // Handle unknown errors
-      return new SupabaseError(
-        error instanceof Error ? error.message : 'Unknown error',
-        'UNKNOWN_ERROR',
-        500,
-        error
-      )
-    }
-  }
-  
-  export const isSupabaseError = (error: unknown): error is SupabaseError => {
-    return error instanceof SupabaseError
-  }
 
-================
-File: supabase/hooks/example-hook.ts
-================
-// src/lib/supabase/hooks/test.ts
+export class ExamService extends BaseService {
+  private readonly examTable = 'initial_exams'
+  private readonly bodyMapTable = 'body_map_selections'
 
-import { useState, useCallback } from 'react'
-import { useAuth } from '@clerk/nextjs'
-import type { TestItem, CreateTestItem, UpdateTestItem } from '../types/example-types'
-import { testService } from '../services/example-service'
-import { SupabaseError } from '../errors/supabase'
-
-export function useTestItems() {
-  const { getToken } = useAuth()
-  const [items, setItems] = useState<TestItem[]>([])
-  const [loading, setLoading] = useState(false)
-  const [error, setError] = useState<SupabaseError | null>(null)
-
-  const fetchItems = useCallback(async () => {
-    try {
-      setLoading(true)
-      const token = await getToken({ template: 'supabase' })
-      const data = await testService.getAll(token)
-      setItems(data)
-      setError(null)
-    } catch (err) {
-      setError(SupabaseError.fromError(err))
-    } finally {
-      setLoading(false)
-    }
-  }, [getToken])
-
-  const createItem = useCallback(async (item: CreateTestItem) => {
-    try {
-      setLoading(true)
-      const token = await getToken({ template: 'supabase' })
-      const newItem = await testService.create(item, token)
-      setItems(prev => [...prev, newItem])
-      setError(null)
-      return newItem
-    } catch (err) {
-      setError(SupabaseError.fromError(err))
-      throw err
-    } finally {
-      setLoading(false)
-    }
-  }, [getToken])
-
-  const updateItem = useCallback(async (id: string, updates: UpdateTestItem) => {
-    try {
-      setLoading(true)
-      const token = await getToken({ template: 'supabase' })
-      const updated = await testService.update(id, updates, token)
-      setItems(prev => prev.map(item => item.id === id ? updated : item))
-      setError(null)
-      return updated
-    } catch (err) {
-      setError(SupabaseError.fromError(err))
-      throw err
-    } finally {
-      setLoading(false)
-    }
-  }, [getToken])
-
-  const deleteItem = useCallback(async (id: string) => {
-    try {
-      setLoading(true)
-      const token = await getToken({ template: 'supabase' })
-      await testService.delete(id, token)
-      setItems(prev => prev.filter(item => item.id !== id))
-      setError(null)
-    } catch (err) {
-      setError(SupabaseError.fromError(err))
-      throw err
-    } finally {
-      setLoading(false)
-    }
-  }, [getToken])
-
-  return {
-    items,
-    loading,
-    error,
-    fetchItems,
-    createItem,
-    updateItem,
-    deleteItem
-  }
-}
-
-================
-File: supabase/README-supa.md
-================
-// src/lib/supabase/README.md
-
-# Data Fetching Enhancements
-
-## SWR/React Query Integration
-
-When scaling the application, consider adding SWR or React Query for:
-- Automatic caching
-- Background revalidation
-- Optimistic updates
-- Request deduplication
-- Offline support
-
-### Implementation Location:
-```
-src/lib/supabase/
-  ├── hooks/              
-  │   ├── base.ts        # Add base hook with SWR/Query config
-  │   └── [domain].ts    # Domain hooks extend base hook
-```
-
-### Example Pattern:
-```typescript
-// hooks/base.ts
-import useSWR from 'swr'
-
-export function useQuery<T>(key: string, fetcher: () => Promise<T>) {
-  return useSWR(key, fetcher, {
-    revalidateOnFocus: false,
-    dedupingInterval: 2000
-  })
-}
-
-// hooks/[domain].ts
-export function useItems() {
-  const { data, error, mutate } = useQuery(
-    'items', 
-    () => itemsService.getAll()
-  )
-  // ... rest of hook logic
-}
-```
-
-Choose SWR for lighter needs, React Query for more complex requirements.
-
-================
-File: supabase/services/base.ts
-================
-// src/lib/supabase/services/base.ts
-
-import { SupabaseClient } from '@supabase/supabase-js'
-import { SupabaseError } from '../errors/supabase'
-import SupabaseClientSingleton from '../client-singleton'
-
-export abstract class BaseService {
-  protected supabase: SupabaseClient | null = null
-  
-  constructor(protected token?: string | null) {}
-  
-  protected async getClient(token?: string | null): Promise<SupabaseClient> {
-    try {
-      this.supabase = await SupabaseClientSingleton.getInstance(token)
-      return this.supabase
-    } catch (error) {
-      throw SupabaseError.fromError(error)
-    }
-  }
-
-  protected handleError(error: unknown): never {
-    throw SupabaseError.fromError(error)
-  }
-
-  protected async withErrorHandling<T>(operation: () => Promise<T>): Promise<T> {
-    try {
-      return await operation()
-    } catch (error) {
-      this.handleError(error)
-    }
-  }
-}
-
-================
-File: supabase/services/example-service.ts
-================
-// src/lib/supabase/services/test.ts
-
-import { BaseService } from './base'
-import type { TestItem, CreateTestItem, UpdateTestItem } from '../types/example-types'
-
-export class TestService extends BaseService {
-  private readonly table = 'test_items'
-
-  async getAll(token?: string | null): Promise<TestItem[]> {
+  async hasCompletedExam(token?: string | null): Promise<boolean> {
     return this.withErrorHandling(async () => {
       const client = await this.getClient(token)
       const { data, error } = await client
-        .from(this.table)
-        .select('*')
+        .from(this.examTable)
+        .select('id')
+        .eq('is_completed', true)
+        .limit(1)
       
       if (error) throw error
-      return data
+      return data && data.length > 0
     })
   }
 
-  async create(item: CreateTestItem, token?: string | null): Promise<TestItem> {
+  async createBodyMapSelection(
+    selections: Record<string, boolean>,
+    score: number,
+    token?: string | null
+  ): Promise<string> {
     return this.withErrorHandling(async () => {
       const client = await this.getClient(token)
       
-      // Get the user_id from the JWT claims
-      const { data: claims, error: claimsError } = await client.rpc('requesting_user_id')
-      if (claimsError) throw claimsError
+      const { data: claims } = await client.rpc('requesting_user_id')
       if (!claims) throw new Error('No user ID found in JWT claims')
 
-      // Insert with explicit user_id
       const { data, error } = await client
-        .from(this.table)
-        .insert({ ...item, user_id: claims })
+        .from(this.bodyMapTable)
+        .insert({
+          user_id: claims,
+          selections: selections,
+          location_score: score,
+          source: 'initial_exam',
+          source_id: 'primary'
+        })
+        .select()
+        .single()
+      
+      if (error) throw error
+      return data.id
+    })
+  }
+
+  async createExam(exam: CreateExamAttempt, token?: string | null): Promise<ExamAttempt> {
+    return this.withErrorHandling(async () => {
+      const client = await this.getClient(token)
+      
+      // Check if user already has a completed exam
+      const hasCompleted = await this.hasCompletedExam(token)
+      if (hasCompleted) {
+        throw new Error('User already has a completed initial exam')
+      }
+      
+      // Get the user_id from JWT claims
+      const { data: claims } = await client.rpc('requesting_user_id')
+      if (!claims) throw new Error('No user ID found in JWT claims')
+
+      const { data, error } = await client
+        .from(this.examTable)
+        .insert({ ...exam, user_id: claims })
         .select()
         .single()
       
@@ -620,13 +521,33 @@ export class TestService extends BaseService {
     })
   }
 
-  async update(id: string, updates: UpdateTestItem, token?: string | null): Promise<TestItem> {
+  async getExam(examId: string, token?: string | null): Promise<ExamAttempt | null> {
     return this.withErrorHandling(async () => {
       const client = await this.getClient(token)
       const { data, error } = await client
-        .from(this.table)
+        .from(this.examTable)
+        .select('*, body_map_selections(*)')
+        .eq('id', examId)
+        .maybeSingle()
+      
+      if (error) throw error
+      return data
+    })
+  }
+
+  async updateExam(examId: string, updates: UpdateExamAttempt, token?: string | null): Promise<ExamAttempt> {
+    return this.withErrorHandling(async () => {
+      // Check if exam is already completed
+      const exam = await this.getExam(examId, token)
+      if (exam?.is_completed) {
+        throw new Error('Cannot update a completed exam')
+      }
+
+      const client = await this.getClient(token)
+      const { data, error } = await client
+        .from(this.examTable)
         .update(updates)
-        .eq('id', id)
+        .eq('id', examId)
         .select()
         .single()
       
@@ -635,79 +556,820 @@ export class TestService extends BaseService {
     })
   }
 
-  async delete(id: string, token?: string | null): Promise<void> {
+  async completeExam(examId: string, token?: string | null): Promise<ExamAttempt> {
     return this.withErrorHandling(async () => {
-      const client = await this.getClient(token)
-      const { error } = await client
-        .from(this.table)
-        .delete()
-        .eq('id', id)
-      
-      if (error) throw error
+      // Check if user already has a completed exam
+      const hasCompleted = await this.hasCompletedExam(token)
+      if (hasCompleted) {
+        throw new Error('User already has a completed initial exam')
+      }
+
+      return this.updateExam(examId, { is_completed: true }, token)
     })
   }
 
-  async testGetUser() {
-    const client = await this.getClient()
-    const { data: { user }, error } = await client.auth.getUser()
-    
-    console.log('User data:', user);
-    console.log('Error:', error);
+  async getLatestExam(token?: string | null): Promise<ExamAttempt | null> {
+    return this.withErrorHandling(async () => {
+      const client = await this.getClient(token)
+      const { data, error } = await client
+        .from(this.examTable)
+        .select('*, body_map_selections(*)')
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle()
+      
+      if (error) throw error
+      return data
+    })
   }
 }
 
-export const testService = new TestService()
+export const examService = new ExamService()
 
 ================
-File: supabase/setup-auth-db.md
+File: summary/page.tsx
 ================
-// lib/supabase.ts
+import { SummarySlide } from '../ui/slides/summary'
 
-/**
- * IMPORTANT: Clerk + Supabase Integration Pattern
- * ----------------------------------------------
- * 
- * When using Clerk authentication with Supabase in this project:
- * 
- * 1. User IDs:
- *    - Clerk uses string IDs (e.g., "user_2rxQpCGXdYW7ZZu3Q9258lZS7o3")
- *    - Never use UUID type for user IDs in Supabase
- *    - Always use TEXT type for user_id columns
- * 
- * 2. Database Tables:
- *    ✅ DO: user_id TEXT NOT NULL
- *    ❌ DON'T: user_id UUID NOT NULL
- * 
- * 3. RLS Policies:
- *    ✅ DO: auth.jwt()->>'sub'
- *    ❌ DON'T: auth.uid()
- * 
- * 4. Storage Bucket Setup:
- *    a. Drop existing policies
- *    b. Ensure owner/owner_id columns are TEXT type
- *    c. Create policies using JWT checks:
- *       USING (
- *         bucket_id = 'your_bucket_name' AND
- *         (auth.jwt()->>'sub')::text IS NOT NULL
- *       )
- * 
- * This pattern prevents UUID/string type mismatches between 
- * Clerk's authentication and Supabase's storage/database systems.
- */
+export default function SummaryPage() {
+  return <SummarySlide />
+}
 
 ================
-File: supabase/types/example-types.ts
+File: types/db.types.ts
 ================
-// src/lib/supabase/types/test.ts
+export interface ExamAttempt {
+  id: string
+  user_id: string
+  safety_answers: Record<string, string>
+  treatment_answers: Record<string, string>
+  body_map_id: string
+  created_at: string
+  is_completed: boolean
+  body_map_selections?: BodyMapSelections
+}
 
-export interface TestItem {
-    id: string
-    created_at: string
-    content: string
+export interface BodyMapSelections {
+  id: string
+  user_id: string
+  selections: Record<string, boolean>
+  location_score: number
+  source: string
+  source_id: string
+  created_at: string
+}
+  
+export type CreateExamAttempt = Omit<ExamAttempt, 'id' | 'created_at'> 
+export type UpdateExamAttempt = Partial<CreateExamAttempt>
+
+================
+File: types/index.ts
+================
+export type ExamStep = 'body-map' | 'safety' | 'treatment' | 'review';
+
+export interface SafetyQuestion {
+  id: string;
+  text: string;
+  subItems?: string[];
+  options: {
+    id: string;
+    text: string;
+  }[];
+}
+
+export interface TreatmentQuestion {
+  id: string;
+  text: string;
+  options: {
+    id: string;
+    text: string;
+  }[];
+}
+
+export interface ExamAnswers {
+  bodyMap: Record<string, boolean>;
+  safety: Record<string, string>;
+  treatment: Record<string, string>;
+}
+
+export type ExamAnswerTypes = keyof ExamAnswers;
+
+================
+File: ui/exam-container.tsx
+================
+//  /(features)/initial-exam/ui/exam-container.tsx
+
+'use client'
+
+import dynamic from 'next/dynamic'
+
+const DynamicExamContent = dynamic(
+  () => import('./exam-content'),
+  { ssr: false }
+)
+
+export function ExamContainer() {
+  return (
+    <div className="min-h-[100dvh] flex flex-col">
+      <DynamicExamContent />
+    </div>
+  )
+}
+
+================
+File: ui/exam-content.tsx
+================
+// src/(features)/initial-exam/ui/exam-content.tsx
+'use client'
+
+import { useAuth } from '@clerk/nextjs'
+import { SafetySlide } from "./slides/safety"
+import { TreatmentSlide } from "./slides/treatment"
+import { ReviewSlide } from "./slides/review"
+import { BodyMapSlide } from "./slides/body-map"
+import { ExamHeader } from "./exam-header"
+import { useExamStore } from "../model/exam-state"
+import { Loader2 } from "lucide-react"
+import { useRouter } from 'next/navigation'
+import { examContent } from "../data/mock-question-content"
+import { ExamAnswerTypes, ExamStep } from '../types'
+import { useErrorHandler } from '@/lib/errors/handlers'
+import { ContinueButton } from '../../shared/components/continue-button'
+
+export default function ExamContent() {
+  const router = useRouter()
+  const handleError = useErrorHandler()
+  const { getToken } = useAuth()
+  const { 
+    currentStep, 
+    answers, 
+    progress,
+    isSubmitting,
+    setAnswer, 
+    setCurrentStep,
+    isStepComplete,
+    updateProgress,
+    saveProgress,
+    submitExam,
+    cleanupExam
+  } = useExamStore()
+
+  const handleNext = async () => {
+    try {
+      console.log('handleNext called')
+      console.log('Current step:', currentStep)
+      console.log('Is step complete:', isStepComplete(currentStep))
+      console.log('Current answers:', answers)
+      
+      const token = await getToken({ template: 'supabase' })
+
+      if (currentStep === 'body-map' && isStepComplete('body-map')) {
+        console.log('Moving from body-map to safety')
+        await saveProgress(token)
+        updateProgress()
+        setCurrentStep('safety')
+      } else if (currentStep === 'safety' && isStepComplete('safety')) {
+        await saveProgress(token)
+        updateProgress()
+        setCurrentStep('treatment')
+      } else if (currentStep === 'treatment' && isStepComplete('treatment')) {
+        await saveProgress(token)
+        updateProgress()
+        setCurrentStep('review')
+      }
+    } catch (error) {
+      console.error('Error in handleNext:', error)
+      handleError(error)
+    }
+  }
+
+  const handleSubmit = async () => {
+    try {
+      const token = await getToken({ template: 'supabase' })
+      await submitExam(token)
+      cleanupExam()
+      router.push('/initial-exam/summary')
+    } catch (error) {
+      handleError(error)
+    }
+  }
+
+  const handleEditSlide = (index: number) => {
+    const steps: ExamStep[] = ['body-map', 'safety', 'treatment']
+    setCurrentStep(steps[index])
+  }
+
+  // Add debugging output
+  console.log('Render state:', {
+    currentStep,
+    answers,
+    isStepComplete: isStepComplete(currentStep),
+    progress
+  })
+
+  return (
+    <div className="min-h-[100dvh] flex flex-col">
+      <ExamHeader progress={progress} />
+
+      <main className="flex-1 overflow-y-auto px-4 pb-20 pt-4">
+        <div className="max-w-2xl mx-auto space-y-6">
+          
+
+          {currentStep === 'body-map' && (
+            <BodyMapSlide
+              selectedParts={answers.bodyMap}
+              onPartSelect={(partId: string, selected: boolean) => {
+                console.log('Selecting part:', partId, selected);
+                setAnswer('bodyMap', partId, selected);
+                // Force check completion after setting answer
+                console.log('Checking completion after selection:', isStepComplete('body-map'));
+              }}
+            />
+          )}
+
+          {currentStep === 'safety' && (
+            <SafetySlide
+              questions={examContent.safety.questions}
+              answers={answers.safety}
+              onAnswer={(qId, aId) => setAnswer('safety', qId, aId)}
+              title={examContent.safety.title}
+              description={examContent.safety.description}
+            />
+          )}
+
+          {currentStep === 'treatment' && (
+            <TreatmentSlide
+              questions={examContent.treatment.questions}
+              answers={answers.treatment}
+              onAnswer={(qId, aId) => setAnswer('treatment', qId, aId)}
+              title={examContent.treatment.title}
+              description={examContent.treatment.description}
+            />
+          )}
+
+          {currentStep === 'review' && (
+            <ReviewSlide
+              answers={answers}
+              onEditSlide={handleEditSlide}
+              onSubmit={handleSubmit}
+            />
+          )}
+        </div>
+      </main>
+
+      {currentStep !== 'review' && (
+        <div className="fixed bottom-0 left-0 right-0 p-4 bg-white border-t">
+          <div className="max-w-2xl mx-auto">
+            {isSubmitting ? (
+              <div className="flex justify-center">
+                <Loader2 className="h-8 w-8 animate-spin" />
+              </div>
+            ) : (
+              <ContinueButton
+                onClick={() => {
+                  console.log('Continue button clicked')
+                  handleNext()
+                }}
+                disabled={!isStepComplete(currentStep)}
+              />
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+================
+File: ui/exam-header.tsx
+================
+'use client'
+
+import { Button } from "@/components/ui/button"
+import { Progress } from "@/components/ui/progress"
+import { ArrowLeft, RotateCcw } from 'lucide-react'
+import { useRouter } from 'next/navigation'
+import { useExamStore } from "../model/exam-state"
+
+interface ExamHeaderProps {
+  progress: number
+}
+
+export function ExamHeader({ progress }: ExamHeaderProps) {
+  const router = useRouter()
+  const resetExam = useExamStore(state => state.resetExam)
+
+  const handleReset = () => {
+    resetExam()
+    router.refresh()
+  }
+
+  return (
+    <header className="sticky top-0 z-50 bg-white border-b">
+      <div className="flex items-center justify-between px-4 py-3">
+        <Button 
+          variant="ghost" 
+          size="icon" 
+          className="text-gray-600"
+          onClick={() => router.back()}
+        >
+          <ArrowLeft className="h-5 w-5" />
+        </Button>
+
+        <div className="flex-1 mx-4">
+          <Progress value={progress} className="h-2" />
+        </div>
+
+        <div className="flex items-center gap-2">
+          <div className="font-semibold">
+            {progress}%
+          </div>
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={handleReset}
+            className="text-gray-600"
+          >
+            <RotateCcw className="h-5 w-5" />
+          </Button>
+        </div>
+      </div>
+    </header>
+  )
+}
+
+================
+File: ui/slides/body-map.tsx
+================
+// components/slides/body-map-slide.tsx
+'use client'
+
+import { forwardRef, useState } from 'react'
+import { MapPin } from 'lucide-react'
+import { Card } from "@/components/ui/card"
+import { BodyPartId } from '@/app/(features)/shared/components/body-map/shared-types'
+import { BaseMap } from '@/app/(features)/shared/components/body-map/base-map'
+
+interface BodyMapSlideProps {
+  selectedParts: Record<string, boolean>
+  onPartSelect: (partId: string, selected: boolean) => void
+}
+
+export const BodyMapSlide = forwardRef<HTMLDivElement, BodyMapSlideProps>(
+  function BodyMapSlide({ selectedParts, onPartSelect }, ref) {
+    const [totalScore, setTotalScore] = useState(0)
+    
+    const selectedLocations = Object.entries(selectedParts)
+      .filter(([selected]) => selected)
+      .map(([partId]) => partId as BodyPartId)
+
+    const handlePartSelect = (partId: string, selected: boolean, score: number) => {
+      onPartSelect(partId, selected)
+      setTotalScore(prev => selected ? prev + score : prev - score)
+    }
+
+    return (
+      <div ref={ref} className="space-y-4">
+        <Card className="p-6 space-y-2">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center space-x-4">
+              <MapPin size={32} className="text-cyan-600" />
+              <h2 className="text-2xl font-bold text-slate-800">Pain Location</h2>
+            </div>
+            {totalScore > 0 && (
+              <div className="text-sm text-slate-600">
+                Pain Score: {totalScore}
+              </div>
+            )}
+          </div>
+          
+          <p className="text-slate-600">
+            Please indicate where you experience pain by clicking on the body regions.
+          </p>
+
+          <BaseMap
+            selectedLocations={selectedLocations}
+            onSelect={handlePartSelect}
+          />
+        </Card>
+      </div>
+    )
+  }
+)
+
+================
+File: ui/slides/review.tsx
+================
+'use client'
+
+import { Card } from "@/components/ui/card"
+import { Button } from "@/components/ui/button"
+import { Check } from 'lucide-react'
+import { examContent } from '../../data/mock-question-content'
+import { ExamAnswers } from '../../types'
+import { ContinueButton } from '../../../shared/components/continue-button'
+import { frontBodyParts, backBodyParts } from '../../../shared/components/body-map/body-part'
+import { BaseMap } from '@/app/(features)/shared/components/body-map/base-map'
+import { BodyPartId } from '@/app/(features)/shared/components/body-map/shared-types'
+
+interface ReviewSlideProps {
+  answers: ExamAnswers
+  onEditSlide: (index: number) => void
+  onSubmit: () => void
+}
+
+function calculateTotalScore(selections: Record<string, boolean>): number {
+  const allBodyParts = [...frontBodyParts, ...backBodyParts]
+  return Object.entries(selections)
+    .filter(([selected]) => selected)
+    .reduce((total, [partId]) => {
+      const part = allBodyParts.find(p => p.id === partId)
+      return total + (part?.score || 0)
+    }, 0)
+}
+
+export function ReviewSlide({ 
+  answers,
+  onEditSlide,
+  onSubmit 
+}: ReviewSlideProps) {
+  const totalPainScore = calculateTotalScore(answers.bodyMap)
+  const selectedLocations = Object.entries(answers.bodyMap)
+    .filter(([, selected]) => selected)
+    .map(([partId]) => partId as BodyPartId)
+
+  return (
+    <Card className="p-6 space-y-6">
+      <div className="flex items-center space-x-4">
+        <Check className="h-8 w-8 text-green-600" />
+        <h2 className="text-2xl font-bold">Review Your Assessment</h2>
+      </div>
+
+      <div className="space-y-6">
+        {/* Body Map Section */}
+        <div className="bg-slate-50 p-4 rounded-lg space-y-4">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="font-semibold text-lg">Pain Location</h3>
+            <div className="flex items-center gap-4">
+              <div className="text-slate-600">
+                Pain Score: {totalPainScore}
+              </div>
+              <Button 
+                variant="ghost" 
+                size="sm" 
+                onClick={() => onEditSlide(0)}
+                className="text-cyan-600 hover:text-cyan-700"
+              >
+                Edit
+              </Button>
+            </div>
+          </div>
+
+          <BaseMap
+            selectedLocations={selectedLocations}
+            onSelect={() => {}}
+            readOnly={true}
+            className="max-w-2xl mx-auto"
+          />
+        </div>
+
+        {/* Safety Section */}
+        <div className="bg-slate-50 p-4 rounded-lg space-y-4">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="font-semibold text-lg">Safety Screening</h3>
+            <Button 
+              variant="ghost" 
+              size="sm" 
+              onClick={() => onEditSlide(1)}
+              className="text-cyan-600 hover:text-cyan-700"
+            >
+              Edit
+            </Button>
+          </div>
+          {examContent.safety.questions.map((question) => (
+            <div key={question.id} className="mb-4">
+              <div className="flex justify-between">
+                <div className="flex-1 mr-4">
+                  <p>{question.text}</p>
+                  {question.subItems && (
+                    <ul className="list-disc ml-4 mt-2">
+                      {question.subItems.map((item, i) => (
+                        <li key={i} className="text-slate-600">{item}</li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
+                <div className="text-slate-600">{answers.safety[question.id]}</div>
+              </div>
+            </div>
+          ))}
+        </div>
+
+        {/* Treatment Section */}
+        <div className="bg-slate-50 p-4 rounded-lg space-y-4">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="font-semibold text-lg">Treatment Assessment</h3>
+            <Button 
+              variant="ghost" 
+              size="sm" 
+              onClick={() => onEditSlide(2)}
+              className="text-cyan-600 hover:text-cyan-700"
+            >
+              Edit
+            </Button>
+          </div>
+          {examContent.treatment.questions.map((question) => (
+            <div key={question.id} className="mb-4">
+              <div className="flex justify-between">
+                <div className="flex-1 mr-4">
+                  <p>{question.text}</p>
+                </div>
+                <div className="text-slate-600">{answers.treatment[question.id]}</div>
+              </div>
+            </div>
+          ))}
+        </div>
+
+        {/* Risk Warnings */}
+        {Object.values(answers.safety).includes('yes') && (
+          <div className="bg-red-50 text-red-600 p-4 rounded-lg border border-red-100">
+            Based on your answers, we recommend consulting a healthcare provider before proceeding.
+          </div>
+        )}
+      </div>
+
+      <div className="flex justify-center pt-4">
+        <ContinueButton 
+          onClick={onSubmit}
+          className="bg-green-600 hover:bg-green-700 dark:bg-green-600 dark:hover:bg-green-700 dark:text-white"
+        />
+      </div>
+    </Card>
+  )
+}
+
+================
+File: ui/slides/safety.tsx
+================
+'use client'
+
+import { Card } from "@/components/ui/card"
+import { Button } from "@/components/ui/button"
+import { SafetyQuestion } from "../../types"
+import { Shield } from "lucide-react"
+
+// src/(features)/initial-exam/ui/slides/safety.tsx
+interface SafetySlideProps {
+    questions: SafetyQuestion[]
+    answers: Record<string, string>
+    onAnswer: (questionId: string, answerId: string) => void
+    title: string
+    description: string
   }
   
-  export type CreateTestItem = Omit<TestItem, 'id' | 'created_at'>
-  export type UpdateTestItem = Partial<CreateTestItem>
+  export function SafetySlide({ 
+    questions, 
+    answers, 
+    onAnswer,
+    title,
+    description 
+  }: SafetySlideProps) {
+    return (
+      <Card className="p-6 space-y-6">
+        <div className="flex items-center space-x-4">
+          <Shield className="h-8 w-8 text-primary" />
+          <div>
+            <h2 className="text-2xl font-bold">{title}</h2>
+            <p className="text-muted-foreground">
+              {description}
+            </p>
+          </div>
+        </div>
+      <div className="space-y-4">
+        {questions.map((question) => (
+          <div key={question.id} className="space-y-2">
+            <p className="font-medium">{question.text}</p>
+            
+            {question.subItems && (
+              <ul className="ml-4 space-y-1 text-sm text-muted-foreground">
+                {question.subItems.map((item, i) => (
+                  <li key={i}>{item}</li>
+                ))}
+              </ul>
+            )}
+
+            <div className="flex gap-2">
+              {question.options.map((option) => (
+                <Button
+                  key={option.id}
+                  variant={answers[question.id] === option.id ? "default" : "outline"}
+                  onClick={() => onAnswer(question.id, option.id)}
+                >
+                  {option.text}
+                </Button>
+              ))}
+            </div>
+          </div>
+        ))}
+      </div>
+    </Card>
+  )
+}
+
+================
+File: ui/slides/summary.tsx
+================
+// src/(features)/initial-exam/ui/slides/summary-slide.tsx
+'use client'
+
+import { Card } from "@/components/ui/card"
+import { Button } from "@/components/ui/button"
+import { CheckCircle, Loader2 } from 'lucide-react'
+import { useRouter } from 'next/navigation'
+import { examContent } from '../../data/mock-question-content'
+import { useAuth } from '@clerk/nextjs'
+import { examService } from '../../services/exam.service'
+import { useEffect, useState } from 'react'
+import { ExamAttempt } from '../../types/db.types'
+import { useErrorHandler } from '@/lib/errors/handlers'
+import { useExamStore } from '../../model/exam-state'
+import { ContinueButton } from '../../../shared/components/continue-button'
+
+export function SummarySlide() {
+  const router = useRouter()
+  const { getToken } = useAuth()
+  const handleError = useErrorHandler()
+  const [exam, setExam] = useState<ExamAttempt | null>(null)
+  const [isLoading, setIsLoading] = useState(true)
+
+  useEffect(() => {
+    // Reset the exam store completely when summary mounts
+    useExamStore.getState().resetExam()
+  }, [])
+
+  useEffect(() => {
+    const fetchExam = async () => {
+      try {
+        const token = await getToken({ template: 'supabase' })
+        const latestExam = await examService.getLatestExam(token)
+        setExam(latestExam)
+      } catch (error) {
+        handleError(error)
+      } finally {
+        setIsLoading(false)
+      }
+    }
+
+    fetchExam()
+  }, [getToken, handleError])
+
+  if (isLoading) {
+    return (
+      <Card className="p-6 flex justify-center items-center">
+        <Loader2 className="h-8 w-8 animate-spin" />
+      </Card>
+    )
+  }
+
+  if (!exam) {
+    return (
+      <Card className="p-6">
+        <div className="text-center">
+          <p>No exam data found.</p>
+          <Button onClick={() => router.push('/')} className="mt-4">
+            Return Home
+          </Button>
+        </div>
+      </Card>
+    )
+  }
+
+  // Calculate any risk factors
+  const hasRiskFactors = Object.values(exam.safety_answers).includes('yes')
+
+  return (
+    <Card className="p-6 space-y-6">
+      <div className="flex items-center space-x-4">
+        <CheckCircle className="h-8 w-8 text-green-600" />
+        <h2 className="text-2xl font-bold">Assessment Complete</h2>
+      </div>
+
+      <div className="space-y-6">
+        {/* Safety Summary */}
+        <div className="bg-slate-50 p-4 rounded-lg space-y-4">
+          <h3 className="font-semibold text-lg">Safety Screening</h3>
+          {examContent.safety.questions.map((question) => (
+            <div key={question.id} className="mb-4">
+              <div className="flex justify-between">
+                <div className="flex-1 mr-4">
+                  <p>{question.text}</p>
+                  {question.subItems && (
+                    <ul className="list-disc ml-4 mt-2">
+                      {question.subItems.map((item, i) => (
+                        <li key={i} className="text-slate-600">{item}</li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
+                <div className="text-slate-600">{exam.safety_answers[question.id]}</div>
+              </div>
+            </div>
+          ))}
+        </div>
+
+        {/* Treatment Summary */}
+        <div className="bg-slate-50 p-4 rounded-lg space-y-4">
+          <h3 className="font-semibold text-lg">Treatment Assessment</h3>
+          {examContent.treatment.questions.map((question) => (
+            <div key={question.id} className="mb-4">
+              <div className="flex justify-between">
+                <div className="flex-1 mr-4">
+                  <p>{question.text}</p>
+                </div>
+                <div className="text-slate-600">{exam.treatment_answers[question.id]}</div>
+              </div>
+            </div>
+          ))}
+        </div>
+
+        {/* Risk Warning */}
+        {hasRiskFactors && (
+          <div className="bg-red-50 text-red-600 p-4 rounded-lg border border-red-100">
+            Based on your answers, we recommend consulting a healthcare provider before proceeding.
+          </div>
+        )}
+      </div>
+
+      <div className="flex justify-center pt-4">
+        <ContinueButton 
+          onClick={() => router.push('/')}
+          className="bg-cyan-600 hover:bg-cyan-700 dark:bg-cyan-600 dark:hover:bg-cyan-700 dark:text-white"
+          text="Continue to Dashboard"
+        />
+      </div>
+    </Card>
+  )
+}
+
+================
+File: ui/slides/treatment.tsx
+================
+'use client'
+
+import { Card } from "@/components/ui/card"
+import { Button } from "@/components/ui/button"
+import { TreatmentQuestion } from "../../types"
+import { Clipboard } from "lucide-react"
+
+interface TreatmentSlideProps {
+    questions: TreatmentQuestion[]
+    answers: Record<string, string>
+    onAnswer: (questionId: string, answerId: string) => void
+    title: string
+    description: string
+  }
+  
+  export function TreatmentSlide({ 
+    questions, 
+    answers, 
+    onAnswer,
+    title,
+    description
+  }: TreatmentSlideProps) {
+    return (
+      <Card className="p-6 space-y-6">
+        <div className="flex items-center space-x-4">
+          <Clipboard className="h-8 w-8 text-primary" />
+          <div>
+            <h2 className="text-2xl font-bold">{title}</h2>
+            <p className="text-muted-foreground">
+              {description}
+            </p>
+          </div>
+        </div>
+
+      <div className="space-y-4">
+        {questions.map((question) => (
+          <div key={question.id} className="space-y-2">
+            <p className="font-medium">{question.text}</p>
+            
+            <div className="flex gap-2">
+              {question.options.map((option) => (
+                <Button
+                  key={option.id}
+                  variant={answers[question.id] === option.id ? "default" : "outline"}
+                  onClick={() => onAnswer(question.id, option.id)}
+                >
+                  {option.text}
+                </Button>
+              ))}
+            </div>
+          </div>
+        ))}
+      </div>
+    </Card>
+  )
+}
 
 
 
