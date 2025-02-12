@@ -6,6 +6,7 @@ import { Check } from 'lucide-react'
 import { examContent } from '../../data/mock-question-content'
 import { ExamAnswers } from '../../types'
 import { ContinueButton } from '../../../shared/components/continue-button'
+import { frontBodyParts, backBodyParts } from '../../../shared/components/body-map/body-part'
 
 interface ReviewSlideProps {
   answers: ExamAnswers
@@ -13,11 +14,23 @@ interface ReviewSlideProps {
   onSubmit: () => void
 }
 
+function calculateTotalScore(selections: Record<string, boolean>): number {
+  const allBodyParts = [...frontBodyParts, ...backBodyParts]
+  return Object.entries(selections)
+    .filter(([_, selected]) => selected)
+    .reduce((total, [partId]) => {
+      const part = allBodyParts.find(p => p.id === partId)
+      return total + (part?.score || 0)
+    }, 0)
+}
+
 export function ReviewSlide({ 
   answers,
   onEditSlide,
   onSubmit 
 }: ReviewSlideProps) {
+  const totalPainScore = calculateTotalScore(answers.bodyMap)
+
   return (
     <Card className="p-6 space-y-6">
       <div className="flex items-center space-x-4">
@@ -30,14 +43,19 @@ export function ReviewSlide({
         <div className="bg-slate-50 p-4 rounded-lg space-y-4">
           <div className="flex items-center justify-between mb-4">
             <h3 className="font-semibold text-lg">Pain Location</h3>
-            <Button 
-              variant="ghost" 
-              size="sm" 
-              onClick={() => onEditSlide(0)}
-              className="text-cyan-600 hover:text-cyan-700"
-            >
-              Edit
-            </Button>
+            <div className="flex items-center gap-4">
+              <div className="text-slate-600">
+                Pain Score: {totalPainScore}
+              </div>
+              <Button 
+                variant="ghost" 
+                size="sm" 
+                onClick={() => onEditSlide(0)}
+                className="text-cyan-600 hover:text-cyan-700"
+              >
+                Edit
+              </Button>
+            </div>
           </div>
           <div>
             {Object.entries(answers.bodyMap).map(([partId, selected]) => (
@@ -50,6 +68,7 @@ export function ReviewSlide({
           </div>
         </div>
 
+        {/* Rest of the review slide content remains the same */}
         {/* Safety Section */}
         <div className="bg-slate-50 p-4 rounded-lg space-y-4">
           <div className="flex items-center justify-between mb-4">
