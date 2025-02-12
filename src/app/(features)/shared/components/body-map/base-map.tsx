@@ -11,6 +11,7 @@ interface BaseMapProps {
   selectedLocations: BodyPartId[]
   onSelect: (regionId: BodyPartId, selected: boolean, score: number) => void
   className?: string
+  readOnly?: boolean
 }
 
 function calculatePartScore(partId: BodyPartId): number {
@@ -19,7 +20,7 @@ function calculatePartScore(partId: BodyPartId): number {
   return part?.score || 0
 }
 
-export function BaseMap({ selectedLocations, onSelect, className }: BaseMapProps) {
+export function BaseMap({ selectedLocations, onSelect, className, readOnly = false }: BaseMapProps) {
   const {
     isBackView,
     refs: {
@@ -33,7 +34,7 @@ export function BaseMap({ selectedLocations, onSelect, className }: BaseMapProps
     viewBox
   } = useBodyMap(selectedLocations)
 
-  const handleClick = (event: React.MouseEvent<SVGElement>) => {
+  const handleClick = readOnly ? undefined : (event: React.MouseEvent<SVGElement>) => {
     const partId = (event.target as SVGElement).getAttribute('data-id')
     if (partId) {
       const bodyPartId = partId as BodyPartId
@@ -46,7 +47,7 @@ export function BaseMap({ selectedLocations, onSelect, className }: BaseMapProps
 
   return (
     <div className={className}>
-      <div className="flex justify-center lg:hidden mb-4">
+      <div className={`flex justify-center lg:hidden mb-4 ${readOnly ? 'hidden' : ''}`}>
         <div className="flex items-center space-x-2">
           <span className="text-sm text-slate-600">Back View</span>
           <input 
@@ -54,6 +55,7 @@ export function BaseMap({ selectedLocations, onSelect, className }: BaseMapProps
             checked={isBackView}
             onChange={() => toggleView()}
             className="rounded border-gray-300"
+            disabled={readOnly}
           />
           <span className="text-sm text-slate-600">Front View</span>
         </div>
@@ -66,14 +68,14 @@ export function BaseMap({ selectedLocations, onSelect, className }: BaseMapProps
               svgRef={mobileBackRef}
               onClick={handleClick}
               viewBox={viewBox}
-              className="w-full h-full"
+              className={`w-full h-full ${readOnly ? 'pointer-events-none' : ''}`}
             />
           ) : (
             <FrontBodyMapSVG
               svgRef={mobileFrontRef}
               onClick={handleClick}
               viewBox={viewBox}
-              className="w-full h-full"
+              className={`w-full h-full ${readOnly ? 'pointer-events-none' : ''}`}
             />
           )}
         </div>
@@ -86,7 +88,7 @@ export function BaseMap({ selectedLocations, onSelect, className }: BaseMapProps
             svgRef={desktopFrontRef}
             onClick={handleClick}
             viewBox={viewBox}
-            className="w-full h-full"
+            className={`w-full h-full ${readOnly ? 'pointer-events-none' : ''}`}
           />
         </div>
         
@@ -96,7 +98,7 @@ export function BaseMap({ selectedLocations, onSelect, className }: BaseMapProps
             svgRef={desktopBackRef}
             onClick={handleClick}
             viewBox={viewBox}
-            className="w-full h-full"
+            className={`w-full h-full ${readOnly ? 'pointer-events-none' : ''}`}
           />
         </div>
       </div>

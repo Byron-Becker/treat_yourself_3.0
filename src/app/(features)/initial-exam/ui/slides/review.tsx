@@ -7,6 +7,8 @@ import { examContent } from '../../data/mock-question-content'
 import { ExamAnswers } from '../../types'
 import { ContinueButton } from '../../../shared/components/continue-button'
 import { frontBodyParts, backBodyParts } from '../../../shared/components/body-map/body-part'
+import { BaseMap } from '@/app/(features)/shared/components/body-map/base-map'
+import { BodyPartId } from '@/app/(features)/shared/components/body-map/shared-types'
 
 interface ReviewSlideProps {
   answers: ExamAnswers
@@ -30,6 +32,9 @@ export function ReviewSlide({
   onSubmit 
 }: ReviewSlideProps) {
   const totalPainScore = calculateTotalScore(answers.bodyMap)
+  const selectedLocations = Object.entries(answers.bodyMap)
+    .filter(([, selected]) => selected)
+    .map(([partId]) => partId as BodyPartId)
 
   return (
     <Card className="p-6 space-y-6">
@@ -57,18 +62,15 @@ export function ReviewSlide({
               </Button>
             </div>
           </div>
-          <div>
-            {Object.entries(answers.bodyMap).map(([partId, selected]) => (
-              selected && (
-                <div key={partId} className="text-slate-600">
-                  {partId.replace(/-/g, ' ')}
-                </div>
-              )
-            ))}
-          </div>
+
+          <BaseMap
+            selectedLocations={selectedLocations}
+            onSelect={() => {}}
+            readOnly={true}
+            className="max-w-2xl mx-auto"
+          />
         </div>
 
-        {/* Rest of the review slide content remains the same */}
         {/* Safety Section */}
         <div className="bg-slate-50 p-4 rounded-lg space-y-4">
           <div className="flex items-center justify-between mb-4">
