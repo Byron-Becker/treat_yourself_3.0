@@ -26,6 +26,30 @@ export function ReviewSlide({
       </div>
 
       <div className="space-y-6">
+        {/* Body Map Section */}
+        <div className="bg-slate-50 p-4 rounded-lg space-y-4">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="font-semibold text-lg">Pain Location</h3>
+            <Button 
+              variant="ghost" 
+              size="sm" 
+              onClick={() => onEditSlide(0)}
+              className="text-cyan-600 hover:text-cyan-700"
+            >
+              Edit
+            </Button>
+          </div>
+          <div>
+            {Object.entries(answers.bodyMap).map(([partId, selected]) => (
+              selected && (
+                <div key={partId} className="text-slate-600">
+                  {partId.replace(/-/g, ' ')}
+                </div>
+              )
+            ))}
+          </div>
+        </div>
+
         {/* Safety Section */}
         <div className="bg-slate-50 p-4 rounded-lg space-y-4">
           <div className="flex items-center justify-between mb-4">
@@ -33,7 +57,7 @@ export function ReviewSlide({
             <Button 
               variant="ghost" 
               size="sm" 
-              onClick={() => onEditSlide(0)}
+              onClick={() => onEditSlide(1)}
               className="text-cyan-600 hover:text-cyan-700"
             >
               Edit
@@ -65,7 +89,7 @@ export function ReviewSlide({
             <Button 
               variant="ghost" 
               size="sm" 
-              onClick={() => onEditSlide(1)}
+              onClick={() => onEditSlide(2)}
               className="text-cyan-600 hover:text-cyan-700"
             >
               Edit

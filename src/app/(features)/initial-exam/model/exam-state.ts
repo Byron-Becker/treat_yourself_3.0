@@ -12,7 +12,7 @@ interface ExamState {
   isSubmitting: boolean
   error: Error | null
   setCurrentStep: (step: ExamStep) => void
-  setAnswer: (step: ExamAnswerTypes, questionId: string, answerId: string) => void
+  setAnswer: (step: ExamAnswerTypes, questionId: string, answerId: string | boolean) => void
   isStepComplete: (step: ExamStep) => boolean
   updateProgress: () => void
   resetExam: () => void
@@ -26,9 +26,10 @@ export const useExamStore = create<ExamState>()(
     persist(
       (set, get) => ({
         examId: null,
-        currentStep: 'safety',
+        currentStep: 'body-map',
         progress: 0,
         answers: {
+          bodyMap: {},
           safety: {},
           treatment: {}
         },
@@ -44,15 +45,28 @@ export const useExamStore = create<ExamState>()(
         
         setAnswer: (step, questionId, answerId) => 
           set(
-            (state) => ({
-              answers: {
-                ...state.answers,
-                [step]: {
-                  ...state.answers[step],
-                  [questionId]: answerId
+            (state) => {
+              if (!state.answers) {
+                return {
+                  answers: {
+                    bodyMap: {},
+                    safety: {},
+                    treatment: {},
+                    [step]: { [questionId]: answerId }
+                  }
                 }
               }
-            }),
+
+              return {
+                answers: {
+                  ...state.answers,
+                  [step]: {
+                    ...(state.answers[step] || {}),
+                    [questionId]: answerId
+                  }
+                }
+              }
+            },
             false,
             'exam/setAnswer'
           ),
@@ -60,14 +74,22 @@ export const useExamStore = create<ExamState>()(
         isStepComplete: (step) => {
           if (step === 'review') return true;
           const { answers } = get()
+          if (!answers) return false;
+          
           const currentAnswers = answers[step as ExamAnswerTypes]
+          if (!currentAnswers) return false;
+
+          if (step === 'body-map') {
+            return Object.values(currentAnswers).some(selected => selected === true)
+          }
           return Object.keys(currentAnswers).length > 0
         },
 
         updateProgress: () => {
           const { answers } = get()
-          const totalQuestions = 6
+          const totalQuestions = 7
           const answeredQuestions = 
+            (Object.values(answers.bodyMap).some(selected => selected === true) ? 1 : 0) +
             Object.keys(answers.safety).length + 
             Object.keys(answers.treatment).length
           const progress = Math.round((answeredQuestions / totalQuestions) * 100)
@@ -77,8 +99,8 @@ export const useExamStore = create<ExamState>()(
         resetExam: () => set(
           {
             examId: null,
-            currentStep: 'safety',
-            answers: { safety: {}, treatment: {} },
+            currentStep: 'body-map',
+            answers: { bodyMap: {}, safety: {}, treatment: {} },
             progress: 0,
             error: null
           },
@@ -89,7 +111,7 @@ export const useExamStore = create<ExamState>()(
         cleanupExam: () => set(
           {
             examId: null,
-            answers: { safety: {}, treatment: {} },
+            answers: { bodyMap: {}, safety: {}, treatment: {} },
             progress: 0,
             error: null
           },
@@ -136,10 +158,21 @@ export const useExamStore = create<ExamState>()(
         name: 'exam-storage',
         partialize: (state) => ({
           examId: state.examId,
-          answers: state.answers,
-          currentStep: state.currentStep,
-          progress: state.progress
-        })
+          answers: state.answers || { bodyMap: {}, safety: {}, treatment: {} },
+          currentStep: state.currentStep || 'body-map',
+          progress: state.progress || 0
+        }),
+        onRehydrateStorage: () => (state) => {
+          if (!state) return;
+          
+          // Ensure answers object exists with all required properties
+          state.answers = {
+            bodyMap: {},
+            safety: {},
+            treatment: {},
+            ...state.answers
+          };
+        }
       }
     )
   )

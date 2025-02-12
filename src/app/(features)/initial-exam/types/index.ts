@@ -1,4 +1,4 @@
-export type ExamStep = 'safety' | 'treatment' | 'review';
+export type ExamStep = 'body-map' | 'safety' | 'treatment' | 'review';
 
 export interface SafetyQuestion {
   id: string;
@@ -20,8 +20,9 @@ export interface TreatmentQuestion {
 }
 
 export interface ExamAnswers {
+  bodyMap: Record<string, boolean>;
   safety: Record<string, string>;
   treatment: Record<string, string>;
 }
 
-export type ExamAnswerTypes = 'safety' | 'treatment';
+export type ExamAnswerTypes = 'bodyMap' | 'safety' | 'treatment';

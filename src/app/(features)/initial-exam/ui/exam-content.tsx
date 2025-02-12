@@ -5,6 +5,7 @@ import { useAuth } from '@clerk/nextjs'
 import { SafetySlide } from "./slides/safety"
 import { TreatmentSlide } from "./slides/treatment"
 import { ReviewSlide } from "./slides/review"
+import { BodyMapSlide } from "./slides/body-map"
 import { ExamHeader } from "./exam-header"
 import { useExamStore } from "../model/exam-state"
 import { Loader2 } from "lucide-react"
@@ -36,7 +37,11 @@ export default function ExamContent() {
     try {
       const token = await getToken({ template: 'supabase' })
 
-      if (currentStep === 'safety' && isStepComplete('safety')) {
+      if (currentStep === 'body-map' && isStepComplete('body-map')) {
+        await saveProgress(token)
+        updateProgress()
+        setCurrentStep('safety')
+      } else if (currentStep === 'safety' && isStepComplete('safety')) {
         await saveProgress(token)
         updateProgress()
         setCurrentStep('treatment')
@@ -62,7 +67,7 @@ export default function ExamContent() {
   }
 
   const handleEditSlide = (index: number) => {
-    const steps: ExamStep[] = ['safety', 'treatment']
+    const steps: ExamStep[] = ['body-map', 'safety', 'treatment']
     setCurrentStep(steps[index])
   }
 
@@ -72,6 +77,13 @@ export default function ExamContent() {
 
       <main className="flex-1 overflow-y-auto px-4 pb-20 pt-4">
         <div className="max-w-2xl mx-auto space-y-6">
+          {currentStep === 'body-map' && (
+            <BodyMapSlide
+              selectedParts={answers.bodyMap}
+              onPartSelect={(partId: string, selected: boolean) => setAnswer('bodyMap', partId, selected)}
+            />
+          )}
+
           {currentStep === 'safety' && (
             <SafetySlide
               questions={examContent.safety.questions}
