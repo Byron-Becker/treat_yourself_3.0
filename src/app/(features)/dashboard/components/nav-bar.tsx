@@ -14,7 +14,7 @@ export function NavBar() {
           <div className="flex items-center gap-8">
             <Link href="/" className="hidden md:block">
               <Image 
-                src="/logo.png"
+                src="/treat-yourself-logo.png"
                 alt="Logo"
                 width={120}
                 height={40}
