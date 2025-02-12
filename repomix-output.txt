@@ -62,7 +62,9 @@ model/dashboard-state.ts
 model/progress-tracking.ts
 model/user-activity.ts
 page.tsx
+services/__tests__/activity.service.ts
 services/__tests__/dashboard.service.test.ts
+services/__tests__/progress.service.ts
 services/activity.service.ts
 services/dashboard.service.ts
 services/progress.service.ts
@@ -622,7 +624,7 @@ export function useDashboardState() {
     }
 
     loadDashboardState()
-  }, [getToken])
+  }, [getToken, dashboardModel])
 
   return {
     state: dashboardModel.getState(),
@@ -640,6 +642,7 @@ import { useState, useEffect } from 'react'
 import { useAuth } from '@clerk/nextjs'
 import { ProgressTrackingModel } from '../model/progress-tracking'
 import { ProgressService } from '../services/progress.service'
+
 
 export function useProgressTracking() {
   const { getToken } = useAuth()
@@ -675,7 +678,7 @@ export function useProgressTracking() {
     }
 
     loadProgressData()
-  }, [getToken])
+  }, [getToken, progressModel])
 
   return {
     streakData: progressModel.getStreakData(),
@@ -1023,65 +1026,300 @@ export const metadata = {
 }
 
 ================
+File: services/__tests__/activity.service.ts
+================
+import { ActivityService } from '../activity.service'
+import { BaseService } from '@/lib/supabase/services/base'
+
+jest.mock('@/lib/supabase/services/base')
+
+describe('ActivityService', () => {
+  let service: ActivityService
+  let mockSupabaseQuery: any
+
+  beforeEach(() => {
+    mockSupabaseQuery = {
+      from: jest.fn().mockReturnThis(),
+      select: jest.fn().mockReturnThis(),
+      order: jest.fn().mockReturnThis(),
+      eq: jest.fn().mockReturnThis(),
+      limit: jest.fn().mockReturnThis()
+    }
+
+    ;(BaseService.prototype.getClient as jest.Mock).mockResolvedValue(mockSupabaseQuery)
+    ;(BaseService.prototype.withErrorHandling as jest.Mock).mockImplementation(
+      (fn) => fn()
+    )
+
+    service = new ActivityService()
+  })
+
+  describe('getRecentActivity', () => {
+    it('should fetch recent activities with limit', async () => {
+      const mockActivities = [
+        { id: '1', completed_at: '2024-02-12T10:00:00Z' },
+        { id: '2', completed_at: '2024-02-11T10:00:00Z' }
+      ]
+
+      mockSupabaseQuery.limit.mockResolvedValue({ data: mockActivities, error: null })
+
+      const result = await service.getRecentActivity({ limit: 2 })
+
+      expect(result.data).toEqual(mockActivities)
+      expect(mockSupabaseQuery.limit).toHaveBeenCalledWith(2)
+    })
+
+    it('should handle errors gracefully', async () => {
+      const mockError = new Error('Database error')
+      mockSupabaseQuery.select.mockResolvedValue({ data: null, error: mockError })
+
+      await expect(service.getRecentActivity()).rejects.toThrow('Database error')
+    })
+  })
+
+  describe('getCurrentStreak', () => {
+    it('should calculate streak correctly', async () => {
+      // Mock current date to be fixed
+      jest.useFakeTimers().setSystemTime(new Date('2024-02-12'))
+
+      const mockDates = {
+        data: [
+          { completed_at: '2024-02-12T10:00:00Z' },
+          { completed_at: '2024-02-11T10:00:00Z' },
+          { completed_at: '2024-02-10T10:00:00Z' },
+          // Gap
+          { completed_at: '2024-02-08T10:00:00Z' }
+        ],
+        error: null
+      }
+
+      mockSupabaseQuery.order.mockResolvedValue(mockDates)
+
+      const result = await service.getCurrentStreak()
+
+      expect(result.data).toBe(3) // 3 consecutive days
+    })
+
+    it('should return 0 for no recent activity', async () => {
+      jest.useFakeTimers().setSystemTime(new Date('2024-02-12'))
+
+      const mockDates = {
+        data: [
+          { completed_at: '2024-02-09T10:00:00Z' } // 3 days ago
+        ],
+        error: null
+      }
+
+      mockSupabaseQuery.order.mockResolvedValue(mockDates)
+
+      const result = await service.getCurrentStreak()
+
+      expect(result.data).toBe(0)
+    })
+  })
+
+  afterEach(() => {
+    jest.useRealTimers()
+  })
+})
+
+================
 File: services/__tests__/dashboard.service.test.ts
 ================
 import { DashboardService } from '../dashboard.service'
+import { BaseService } from '@/lib/supabase/services/base'
+
+jest.mock('@/lib/supabase/services/base')
 
 describe('DashboardService', () => {
   let service: DashboardService
-  let mockClient: any
+  let mockSupabaseQuery: any
 
   beforeEach(() => {
-    mockClient = {
+    mockSupabaseQuery = {
       from: jest.fn().mockReturnThis(),
       select: jest.fn().mockReturnThis(),
-      maybeSingle: jest.fn(),
+      maybeSingle: jest.fn().mockReturnThis(),
       order: jest.fn().mockReturnThis(),
       gte: jest.fn().mockReturnThis()
     }
-    service = new DashboardService(mockClient)
+
+    ;(BaseService.prototype.getClient as jest.Mock).mockResolvedValue(mockSupabaseQuery)
+    ;(BaseService.prototype.withErrorHandling as jest.Mock).mockImplementation(
+      (fn) => fn()
+    )
+
+    service = new DashboardService()
   })
 
   describe('getInitialExamStatus', () => {
-    it('should return initial exam data when exists', async () => {
+    it('should fetch initial exam status', async () => {
       const mockExam = {
         id: '1',
-        is_completed: true
+        is_completed: true,
+        created_at: '2024-02-12T10:00:00Z'
       }
-      mockClient.maybeSingle.mockResolvedValue({ data: mockExam })
+
+      mockSupabaseQuery.maybeSingle.mockResolvedValue({ data: mockExam, error: null })
 
       const result = await service.getInitialExamStatus()
+
       expect(result.data).toEqual(mockExam)
-      expect(result.error).toBeNull()
+      expect(mockSupabaseQuery.from).toHaveBeenCalledWith('initial_exams')
     })
 
-    it('should handle errors properly', async () => {
-      const mockError = new Error('Database error')
-      mockClient.maybeSingle.mockRejectedValue(mockError)
+    it('should handle missing exam data', async () => {
+      mockSupabaseQuery.maybeSingle.mockResolvedValue({ data: null, error: null })
 
       const result = await service.getInitialExamStatus()
+
       expect(result.data).toBeNull()
-      expect(result.error).toEqual(mockError)
     })
   })
 
-  // Add more test cases...
+  describe('getLessonCompletions', () => {
+    it('should fetch lesson completions', async () => {
+      const mockCompletions = [
+        { id: '1', lesson_id: 'lesson1', completed_at: '2024-02-12T10:00:00Z' },
+        { id: '2', lesson_id: 'lesson2', completed_at: '2024-02-11T10:00:00Z' }
+      ]
+
+      mockSupabaseQuery.order.mockResolvedValue({ data: mockCompletions, error: null })
+
+      const result = await service.getLessonCompletions()
+
+      expect(result.data).toEqual(mockCompletions)
+      expect(mockSupabaseQuery.from).toHaveBeenCalledWith('lesson_completions')
+    })
+  })
+
+  describe('hasRecentROMAssessment', () => {
+    it('should check for recent ROM assessment', async () => {
+      jest.useFakeTimers().setSystemTime(new Date('2024-02-12'))
+
+      mockSupabaseQuery.gte.mockResolvedValue({ count: 1, error: null })
+
+      const result = await service.hasRecentROMAssessment()
+
+      expect(result.data).toBe(true)
+      expect(mockSupabaseQuery.from).toHaveBeenCalledWith('rom_assessments')
+    })
+
+    it('should return false when no recent assessments', async () => {
+      mockSupabaseQuery.gte.mockResolvedValue({ count: 0, error: null })
+
+      const result = await service.hasRecentROMAssessment()
+
+      expect(result.data).toBe(false)
+    })
+  })
+
+  afterEach(() => {
+    jest.useRealTimers()
+  })
+})
+
+================
+File: services/__tests__/progress.service.ts
+================
+import { ProgressService } from '../progress.service'
+import { BaseService } from '@/lib/supabase/services/base'
+
+jest.mock('@/lib/supabase/services/base')
+
+describe('ProgressService', () => {
+  let service: ProgressService
+  let mockSupabaseQuery: any
+
+  beforeEach(() => {
+    mockSupabaseQuery = {
+      from: jest.fn().mockReturnThis(),
+      select: jest.fn().mockReturnThis(),
+      eq: jest.fn().mockReturnThis(),
+      gte: jest.fn().mockReturnThis(),
+      lte: jest.fn().mockReturnThis()
+    }
+
+    ;(BaseService.prototype.getClient as jest.Mock).mockResolvedValue(mockSupabaseQuery)
+    ;(BaseService.prototype.withErrorHandling as jest.Mock).mockImplementation(
+      (fn) => fn()
+    )
+
+    service = new ProgressService()
+  })
+
+  describe('getActivityDates', () => {
+    it('should fetch activity dates with date range', async () => {
+      const mockActivities = [
+        { completed_at: '2024-02-12T10:00:00Z' },
+        { completed_at: '2024-02-11T10:00:00Z' }
+      ]
+
+      mockSupabaseQuery.lte.mockResolvedValue({ data: mockActivities, error: null })
+
+      const result = await service.getActivityDates({
+        from: '2024-02-10',
+        to: '2024-02-12'
+      })
+
+      expect(result.data).toEqual(['2024-02-12', '2024-02-11'])
+      expect(mockSupabaseQuery.from).toHaveBeenCalledWith('exercise_series')
+      expect(mockSupabaseQuery.gte).toHaveBeenCalledWith('completed_at', '2024-02-10')
+      expect(mockSupabaseQuery.lte).toHaveBeenCalledWith('completed_at', '2024-02-12')
+    })
+
+    it('should handle missing date range', async () => {
+      const mockActivities = [
+        { completed_at: '2024-02-12T10:00:00Z' }
+      ]
+
+      mockSupabaseQuery.eq.mockResolvedValue({ data: mockActivities, error: null })
+
+      const result = await service.getActivityDates()
+
+      expect(result.data).toEqual(['2024-02-12'])
+    })
+  })
+
+  describe('getLessonProgress', () => {
+    it('should fetch lesson progress', async () => {
+      const mockProgress = [
+        { id: '1', lesson_id: 'lesson1', completed: true },
+        { id: '2', lesson_id: 'lesson2', completed: false }
+      ]
+
+      mockSupabaseQuery.select.mockResolvedValue({ data: mockProgress, error: null })
+
+      const result = await service.getLessonProgress()
+
+      expect(result.data).toEqual(mockProgress)
+      expect(mockSupabaseQuery.from).toHaveBeenCalledWith('lesson_completions')
+    })
+
+    it('should handle errors', async () => {
+      const mockError = new Error('Database error')
+      mockSupabaseQuery.select.mockResolvedValue({ data: null, error: mockError })
+
+      await expect(service.getLessonProgress()).rejects.toThrow('Database error')
+    })
+  })
 })
 
 ================
 File: services/activity.service.ts
 ================
-import { SupabaseClient } from '@supabase/supabase-js'
+import { BaseService } from '@/lib/supabase/services/base'
 import { ExerciseRecord } from '../types/api.types'
 import { BaseResponse, QueryOptions } from '../types/service.types'
 
-export class ActivityService {
-  constructor(private readonly client: SupabaseClient) {}
+export class ActivityService extends BaseService {
+  private readonly table = 'exercise_series'
 
   async getRecentActivity(options?: QueryOptions): Promise<BaseResponse<ExerciseRecord[]>> {
-    try {
-      let query = this.client
-        .from('exercise_series')
+    return this.withErrorHandling(async () => {
+      const client = await this.getClient(this.token)
+      let query = client
+        .from(this.table)
         .select('*')
         .order('completed_at', { ascending: false })
 
@@ -1094,18 +1332,14 @@ export class ActivityService {
       if (error) throw error
 
       return { data, error: null }
-    } catch (error) {
-      return { 
-        data: null, 
-        error: error instanceof Error ? error : new Error('Unknown error') 
-      }
-    }
+    })
   }
 
   async getCurrentStreak(): Promise<BaseResponse<number>> {
-    try {
-      const { data: dates, error } = await this.client
-        .from('exercise_series')
+    return this.withErrorHandling(async () => {
+      const client = await this.getClient(this.token)
+      const { data: dates, error } = await client
+        .from(this.table)
         .select('completed_at')
         .eq('status', 'completed')
         .order('completed_at', { ascending: false })
@@ -1116,12 +1350,7 @@ export class ActivityService {
       const streak = this.calculateStreak(dates.map(d => d.completed_at))
 
       return { data: streak, error: null }
-    } catch (error) {
-      return { 
-        data: null, 
-        error: error instanceof Error ? error : new Error('Unknown error') 
-      }
-    }
+    })
   }
 
   private calculateStreak(dates: string[]): number {
@@ -1154,88 +1383,79 @@ export class ActivityService {
 ================
 File: services/dashboard.service.ts
 ================
-import { SupabaseClient } from '@supabase/supabase-js'
+import { BaseService } from '@/lib/supabase/services/base'
 import { 
   InitialExamRecord, 
   LessonCompletionRecord 
 } from '../types/api.types'
 import { BaseResponse } from '../types/service.types'
 
-export class DashboardService {
-  constructor(private readonly client: SupabaseClient) {}
+export class DashboardService extends BaseService {
+  private readonly examTable = 'initial_exams'
+  private readonly completionsTable = 'lesson_completions'
+  private readonly romTable = 'rom_assessments'
 
   async getInitialExamStatus(): Promise<BaseResponse<InitialExamRecord>> {
-    try {
-      const { data, error } = await this.client
-        .from('initial_exams')
+    return this.withErrorHandling(async () => {
+      const client = await this.getClient(this.token)
+      const { data, error } = await client
+        .from(this.examTable)
         .select('*')
         .maybeSingle()
 
       if (error) throw error
 
       return { data, error: null }
-    } catch (error) {
-      return { 
-        data: null, 
-        error: error instanceof Error ? error : new Error('Unknown error') 
-      }
-    }
+    })
   }
 
   async getLessonCompletions(): Promise<BaseResponse<LessonCompletionRecord[]>> {
-    try {
-      const { data, error } = await this.client
-        .from('lesson_completions')
+    return this.withErrorHandling(async () => {
+      const client = await this.getClient(this.token)
+      const { data, error } = await client
+        .from(this.completionsTable)
         .select('*')
         .order('completed_at', { ascending: false })
 
       if (error) throw error
 
       return { data, error: null }
-    } catch (error) {
-      return { 
-        data: null, 
-        error: error instanceof Error ? error : new Error('Unknown error') 
-      }
-    }
+    })
   }
 
   async hasRecentROMAssessment(): Promise<BaseResponse<boolean>> {
-    try {
+    return this.withErrorHandling(async () => {
+      const client = await this.getClient(this.token)
       const threeDaysAgo = new Date()
       threeDaysAgo.setDate(threeDaysAgo.getDate() - 3)
 
-      const { count, error } = await this.client
-        .from('rom_assessments')
+      const { count, error } = await client
+        .from(this.romTable)
         .select('*', { count: 'exact', head: true })
         .gte('created_at', threeDaysAgo.toISOString())
 
       if (error) throw error
 
       return { data: count ? count > 0 : false, error: null }
-    } catch (error) {
-      return { 
-        data: null, 
-        error: error instanceof Error ? error : new Error('Unknown error') 
-      }
-    }
+    })
   }
 }
 
 ================
 File: services/progress.service.ts
 ================
-import { SupabaseClient } from '@supabase/supabase-js'
+import { BaseService } from '@/lib/supabase/services/base'
 import { LessonCompletionRecord } from '../types/api.types'
 import { BaseResponse, QueryOptions } from '../types/service.types'
 
-export class ProgressService {
-  constructor(private readonly client: SupabaseClient) {}
+export class ProgressService extends BaseService {
+  private readonly table = 'exercise_series'
 
   async getActivityDates(options?: QueryOptions): Promise<BaseResponse<string[]>> {
-    try {
-      let query = this.client
-        .from('exercise_series')
+    return this.withErrorHandling(async () => {
+      const client = await this.getClient(this.token)
+      let query = client
+        .from(this.table)
         .select('completed_at')
         .eq('status', 'completed')
 
@@ -1254,29 +1474,20 @@ export class ProgressService {
         data: data.map(record => record.completed_at.split('T')[0]),
         error: null 
       }
-    } catch (error) {
-      return { 
-        data: null, 
-        error: error instanceof Error ? error : new Error('Unknown error') 
-      }
-    }
+    })
   }
 
   async getLessonProgress(): Promise<BaseResponse<LessonCompletionRecord[]>> {
-    try {
-      const { data, error } = await this.client
+    return this.withErrorHandling(async () => {
+      const client = await this.getClient(this.token)
+      const { data, error } = await client
         .from('lesson_completions')
         .select('*')
 
       if (error) throw error
 
       return { data, error: null }
-    } catch (error) {
-      return { 
-        data: null, 
-        error: error instanceof Error ? error : new Error('Unknown error') 
-      }
-    }
+    })
   }
 }
 
