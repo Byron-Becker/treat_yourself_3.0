@@ -85,7 +85,7 @@ export default function Home() {
         </div>
       </div>
 
-      <Link href="/lessons/exercise-lesson">
+      <Link href="/lessons/exercise-lessson">
         <Button className="mt-4">Go to Exercise Lesson</Button>
       </Link>
 
@@ -95,6 +95,10 @@ export default function Home() {
 
       <Link href="/initial-exam">
         <Button className="mt-4 ml-4">Go to initial exam</Button>
+      </Link>
+
+      <Link href="/exercise-progression/1">
+        <Button className="mt-4 ml-4">Go to exercise progression</Button>
       </Link>
 
       <div className="border rounded-lg shadow-sm">

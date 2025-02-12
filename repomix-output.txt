@@ -45,669 +45,1793 @@ Additional Info:
 ================================================================
 Directory Structure
 ================================================================
-errors/base.ts
-errors/codes.ts
-errors/handlers.ts
-supabase/client-singleton.ts
-supabase/client-ssr.ts
-supabase/errors/supabase.ts
-supabase/hooks/example-hook.ts
-supabase/README-supa.md
-supabase/services/base.ts
-supabase/services/example-service.ts
-supabase/setup-auth-db.md
-supabase/types/example-types.ts
+[id]/page.tsx
+components/exercise-container.tsx
+components/exercise-footer.tsx
+components/exercise-header.tsx
+components/index.ts
+components/loading-overlay.tsx
+components/slides/instruction-slide.tsx
+components/slides/question-slide.tsx
+components/slides/setup-slide.tsx
+data/exercise-content.ts
+data/index.ts
+hooks/index.ts
+hooks/use-progression-state.ts
+hooks/use-response-handler.ts
+hooks/use-timer-state.ts
+hooks/use-timer.ts
+layout.tsx
+metadata.ts
+model/exercise-progression.ts
+model/index.ts
+model/timer.ts
+services/exercise-progression.service.ts
+services/index.ts
+services/progression-rules.service.ts
+types/exercise.types.ts
+types/index.ts
+types/progression.types.ts
+types/question.types.ts
+types/response.types.ts
+types/timer.types.ts
 
 ================================================================
 Files
 ================================================================
 
 ================
-File: errors/base.ts
+File: [id]/page.tsx
 ================
-import { ErrorCode } from './codes'
+import { ExerciseContainer } from '../components'
+import { exercises } from '../data'
+import { notFound } from 'next/navigation'
+import { Metadata } from 'next'
 
-export class AppError extends Error {
-  constructor(
-    message: string,
-    public code: ErrorCode,
-    public status: number = 500,
-    public details?: unknown,
-    public timestamp: Date = new Date()
-  ) {
-    super(message)
-    this.name = 'AppError'
-    // Maintains proper stack trace for where error was thrown (if available)
-    if (Error.captureStackTrace && typeof Error.captureStackTrace === 'function') {
-      Error.captureStackTrace(this, this.constructor)
-    } else {
-      this.stack = new Error().stack
-    }
+interface PageProps {
+  params: {
+    id: string
+  }
+}
+
+export default async function ExercisePage({ params }: PageProps) {
+  const exercise = exercises[params.id]
+
+  if (!exercise) {
+    notFound()
   }
 
-  toJSON() {
+  return <ExerciseContainer exercise={exercise} />
+}
+
+// Generate metadata for the page
+export async function generateMetadata({ params }: PageProps): Promise<Metadata> {
+  const exercise = exercises[params.id]
+
+  if (!exercise) {
     return {
-      name: this.name,
-      message: this.message,
-      code: this.code,
-      status: this.status,
-      details: this.details,
-      timestamp: this.timestamp,
-      stack: this.stack
+      title: 'Exercise Not Found',
+      description: 'The requested exercise could not be found.'
+    }
+  }
+
+  return {
+    title: `Exercise: ${exercise.name}`,
+    description: `Follow along with the ${exercise.name.toLowerCase()} exercise progression.`
+  }
+}
+
+// Generate static params for all exercises
+export async function generateStaticParams() {
+  return Object.keys(exercises).map((id) => ({
+    id
+  }))
+}
+
+================
+File: components/exercise-container.tsx
+================
+'use client'
+
+import { useAuth } from '@clerk/nextjs'
+import { useRouter } from 'next/navigation'
+import { Exercise } from '../types'
+import { useProgressionState, useResponseHandler } from '../hooks'
+import { ExerciseHeader } from './exercise-header'
+import { ExerciseFooter } from './exercise-footer'
+import { SetupSlide } from './slides/setup-slide'
+import { InstructionSlide } from './slides/instruction-slide'
+import { QuestionSlide } from './slides/question-slide'
+import { LoadingOverlay } from './loading-overlay'
+import { useEffect, useRef} from 'react'
+import { Timer } from '../types'
+import { useTimer } from '../hooks/use-timer'
+
+interface ExerciseContainerProps {
+  exercise: Exercise
+}
+
+export function ExerciseContainer({ exercise }: ExerciseContainerProps) {
+  const { isLoaded, isSignedIn } = useAuth()
+  const router = useRouter()
+
+  const {
+    state,
+    startExercise,
+    pauseExercise,
+    submitResponse,
+    updateTimeRemaining
+  } = useProgressionState([exercise])
+
+  const currentExercise = state.exercises[state.currentExerciseIndex]
+  const currentState = state.states[state.currentExerciseIndex]
+
+  const { handleResponse, canContinue } = useResponseHandler({
+    onSubmitResponse: submitResponse,
+    currentResponses: currentState.answers
+  })
+
+  const timer = useTimer(exercise.duration)
+  const timerRef = useRef<Timer>(timer)
+  
+  useEffect(() => {
+    timerRef.current = timer
+  }, [timer])
+
+  useEffect(() => {
+    const handleTimeUpdate = (timeRemaining: number) => {
+      console.log('Timer update:', timeRemaining)
+      updateTimeRemaining(timeRemaining)
+    }
+
+    timerRef.current.addListener(handleTimeUpdate)
+    return () => timerRef.current.removeListener(handleTimeUpdate)
+  }, [updateTimeRemaining])
+
+  useEffect(() => {
+    console.log('Timer state effect:', { isTimerActive: currentState.isTimerActive })
+    if (currentState.isTimerActive) {
+      timerRef.current.start()
+    } else {
+      timerRef.current.pause()
+    }
+  }, [currentState.isTimerActive])
+
+  if (!isLoaded) return <LoadingOverlay />
+  if (!isSignedIn) {
+    router.push('/sign-in')
+    return null
+  }
+
+  return (
+    <div className="min-h-[100dvh] flex flex-col">
+      <ExerciseHeader 
+        name={exercise.name}
+        timeRemaining={currentState.timeRemaining}
+        isActive={currentState.isTimerActive}
+      />
+
+      <main className="flex-1 overflow-y-auto px-4 pb-32 pt-4">
+        <div className="max-w-2xl mx-auto space-y-6">
+          {currentState.phase === 'setup' && (
+            <SetupSlide
+              exercise={currentExercise}
+              state={currentState}
+              onTimerStart={startExercise}
+              onTimerStop={pauseExercise}
+              onAnswerSelected={handleResponse}
+            />
+          )}
+
+          {currentState.phase !== 'setup' && (
+            <InstructionSlide
+              exercise={currentExercise}
+              state={currentState}
+              onTimerStart={startExercise}
+              onTimerStop={pauseExercise}
+              onAnswerSelected={handleResponse}
+            />
+          )}
+
+          {currentState.visibleQuestions.map((questionId) => (
+            <QuestionSlide
+              key={questionId}
+              exercise={currentExercise}
+              state={currentState}
+              questionId={questionId}
+              onTimerStart={startExercise}
+              onTimerStop={pauseExercise}
+              onAnswerSelected={handleResponse}
+            />
+          ))}
+        </div>
+      </main>
+
+      <ExerciseFooter
+        isActive={currentState.isTimerActive}
+        timeRemaining={currentState.timeRemaining}
+        onStart={startExercise}
+        onStop={pauseExercise}
+        canContinue={canContinue(currentState.answers)}
+      />
+    </div>
+  )
+}
+
+================
+File: components/exercise-footer.tsx
+================
+'use client'
+
+import { Button } from "@/components/ui/button"
+import { PauseCircle, Play } from 'lucide-react'
+
+interface ExerciseFooterProps {
+  isActive: boolean
+  timeRemaining: number
+  onStart: () => void
+  onStop: () => void
+  canContinue: boolean
+}
+
+export function ExerciseFooter({ 
+  isActive, 
+  timeRemaining,
+  onStart, 
+  onStop,
+  canContinue
+}: ExerciseFooterProps) {
+  if (timeRemaining === 0) {
+    return (
+      <div className="fixed bottom-0 left-0 right-0 p-4 shadow-lg bg-white">
+        <div className="max-w-xs mx-auto">
+          <Button 
+            onClick={onStop}
+            className="w-full h-12 text-lg bg-green-500 hover:bg-green-600"
+            disabled={!canContinue}
+          >
+            Complete Exercise
+          </Button>
+        </div>
+      </div>
+    )
+  }
+
+  return (
+    <div className="fixed bottom-0 left-0 right-0 p-4 shadow-lg bg-white">
+      <div className="max-w-xs mx-auto">
+        {!isActive ? (
+          <Button 
+            onClick={onStart}
+            className="w-full h-12 text-lg bg-green-500 hover:bg-green-500 hover:shadow-sm hover:scale-105 transition-transform"
+          >
+            <Play className="w-5 h-5 mr-2" style={{ marginRight: '2%' }} />
+            <span style={{ marginRight: '8%' }}>Start Exercise</span>
+          </Button>
+        ) : (
+          <Button 
+            onClick={onStop}
+            variant="destructive"
+            className="w-full h-12 text-lg"
+          >
+            <PauseCircle className="w-5 h-5 mr-2" style={{ marginRight: '2%' }} />
+            <span style={{ marginRight: '8%' }}>Stop Exercise</span>
+          </Button>
+        )}
+      </div>
+    </div>
+  )
+}
+
+================
+File: components/exercise-header.tsx
+================
+'use client'
+
+import { motion } from 'framer-motion'
+import { UserButton } from '@clerk/nextjs'
+import Link from 'next/link'
+import { ArrowLeft } from 'lucide-react'
+
+interface ExerciseHeaderProps {
+  name: string
+  timeRemaining: number
+  isActive: boolean
+}
+
+export function ExerciseHeader({ name, timeRemaining }: ExerciseHeaderProps) {
+  const formatTime = (seconds: number) => {
+    const minutes = Math.floor(seconds / 60)
+    const remainingSeconds = seconds % 60
+    return `${minutes}:${remainingSeconds.toString().padStart(2, '0')}`
+  }
+
+  return (
+    <motion.header 
+      className="sticky top-0 z-50 bg-white border-b"
+      initial={{ y: -100 }}
+      animate={{ y: 0 }}
+    >
+      <div className="flex items-center justify-between p-4">
+        <Link 
+          href="/dashboard" 
+          className="text-gray-600 hover:text-gray-900 transition-colors"
+        >
+          <ArrowLeft size={24} />
+        </Link>
+        <div className="flex-grow text-center text-2xl font-bold">
+          {name} - {formatTime(timeRemaining)}
+        </div>
+        <div className="flex items-center">
+          <UserButton />
+        </div>
+      </div>
+    </motion.header>
+  )
+}
+
+================
+File: components/index.ts
+================
+export * from './exercise-container'
+export * from './exercise-header'
+export * from './exercise-footer'
+export * from './loading-overlay'
+export * from './slides/setup-slide'
+export * from './slides/instruction-slide'
+export * from './slides/question-slide'
+
+================
+File: components/loading-overlay.tsx
+================
+'use client'
+
+import { motion } from 'framer-motion'
+import { Loader2 } from 'lucide-react'
+
+interface LoadingOverlayProps {
+  message?: string
+}
+
+export function LoadingOverlay({ message = 'Loading...' }: LoadingOverlayProps) {
+  return (
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      className="fixed inset-0 bg-white/80 backdrop-blur-sm flex items-center justify-center z-50"
+    >
+      <div className="flex flex-col items-center gap-3">
+        <Loader2 className="h-8 w-8 animate-spin text-blue-500" />
+        <div className="text-sm text-gray-600">
+          {message}
+        </div>
+      </div>
+    </motion.div>
+  )
+}
+
+================
+File: components/slides/instruction-slide.tsx
+================
+'use client'
+
+import { forwardRef } from 'react'
+import { Card } from "@/components/ui/card"
+import { AlertCircle } from 'lucide-react'
+import { motion } from 'framer-motion'
+import { Exercise, ExerciseState } from '../../types'
+
+interface InstructionSlideProps {
+  exercise: Exercise
+  state: ExerciseState
+  onTimerStart: () => void
+  onTimerStop: () => void
+  onAnswerSelected: (questionId: string, answerId: string) => void
+}
+
+export const InstructionSlide = forwardRef<HTMLDivElement, InstructionSlideProps>(
+  function InstructionSlide({ exercise }, ref) {
+    return (
+      <motion.div
+        ref={ref}
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.3 }}
+        className="scroll-mt-20"
+      >
+        <Card className="p-6 space-y-6">
+          <div className="space-y-4">
+            {/* Execution Instructions */}
+            <div className="bg-blue-50 p-4 rounded-lg">
+              <h3 className="font-semibold text-lg mb-3">During Exercise</h3>
+              <ul className="space-y-2">
+                {exercise.instructions.execution.map((instruction, index) => (
+                  <li key={index} className="flex items-start gap-3">
+                    <span className="text-blue-500">•</span>
+                    <span className="text-slate-700">{instruction}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+
+            {/* Safety Instructions */}
+            <div className="bg-red-50 p-4 rounded-lg">
+              <div className="flex items-start gap-3">
+                <AlertCircle className="w-5 h-5 text-red-500 flex-shrink-0 mt-1" />
+                <div>
+                  <h3 className="font-semibold text-lg mb-2">Safety Notes</h3>
+                  <ul className="space-y-2">
+                    {exercise.instructions.safety.map((instruction, index) => (
+                      <li key={index} className="text-slate-700">
+                        • {instruction}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              </div>
+            </div>
+          </div>
+        </Card>
+      </motion.div>
+    )
+  }
+)
+
+================
+File: components/slides/question-slide.tsx
+================
+'use client'
+
+import { Card } from "@/components/ui/card"
+import { Button } from "@/components/ui/button"
+import { motion } from 'framer-motion'
+import { Exercise, ExerciseState } from '../../types'
+import { questions } from '../../data/exercise-content'
+import { forwardRef } from 'react'
+
+interface QuestionSlideProps {
+  exercise: Exercise
+  state: ExerciseState
+  questionId: string
+  onTimerStart: () => void
+  onTimerStop: () => void
+  onAnswerSelected: (questionId: string, answerId: string) => void
+}
+
+export const QuestionSlide = forwardRef<HTMLDivElement, QuestionSlideProps>(({ 
+  state, 
+  questionId,
+  onAnswerSelected 
+}, ref) => {
+  const question = questions[questionId]
+  const selectedAnswer = state.answers[questionId]
+
+  return (
+    <motion.div
+      ref={ref}
+      initial={{ opacity: 0, y: 20 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.3 }}
+      className="scroll-mt-20"
+    >
+      <Card className="p-6 space-y-4">
+        <h3 className="text-lg font-semibold">
+          {question.text}
+        </h3>
+
+        <div className="grid grid-cols-1 gap-3">
+          {question.options.map((option) => (
+            <Button
+              key={option.id}
+              variant={selectedAnswer === option.id ? "default" : "outline"}
+              className={`w-full justify-start text-left h-auto p-4 ${
+                selectedAnswer === option.id ? 'bg-blue-50 border-blue-500 text-blue-700' : ''
+              }`}
+              onClick={() => onAnswerSelected(questionId, option.id)}
+              disabled={state.answers[questionId] !== undefined}
+            >
+              {option.text}
+            </Button>
+          ))}
+        </div>
+      </Card>
+    </motion.div>
+  )
+}) as React.ForwardRefExoticComponent<QuestionSlideProps & React.RefAttributes<HTMLDivElement>>;
+
+// Add display name for the component
+QuestionSlide.displayName = 'QuestionSlide';
+
+================
+File: components/slides/setup-slide.tsx
+================
+'use client'
+
+import Image from 'next/image'
+import { Card } from "@/components/ui/card"
+import { CheckCircle } from 'lucide-react'
+import { motion } from 'framer-motion'
+import { Exercise, ExerciseState } from '../../types'
+import { useEffect, useState } from 'react'
+
+interface SetupSlideProps {
+  exercise: Exercise
+  state: ExerciseState
+  onTimerStart: () => void
+  onTimerStop: () => void
+  onAnswerSelected: (questionId: string, answerId: string) => void
+}
+
+export function SetupSlide({ exercise }: SetupSlideProps) {
+  const [videoUrl, setVideoUrl] = useState(exercise.imageUrl)
+
+  useEffect(() => {
+    if (exercise.mediaType === 'video') {
+      // In a real app, you'd fetch this from your video service
+      setVideoUrl(exercise.imageUrl)
+    }
+  }, [exercise])
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 20 }}
+      animate={{ opacity: 1, y: 0 }}
+    >
+      <Card className="p-3 space-y-1">
+        <h2 className="text-2xl font-bold text-center">
+          {exercise.name}
+        </h2>
+
+        <div className="relative h-[140px] md:h-[250px] rounded-lg overflow-hidden bg-gray-100">
+          {exercise.mediaType === 'video' ? (
+            <video
+              src={videoUrl}
+              className="w-full h-full object-contain"
+              controls
+              playsInline
+            />
+          ) : (
+            <Image
+              src={exercise.imageUrl}
+              alt={exercise.name}
+              fill
+              sizes="(max-width: 768px) 100vw, 50vw"
+              className="object-contain"
+              priority
+              unoptimized
+            />
+          )}
+        </div>
+
+        <div className="space-y-1">
+          <h3 className="font-semibold text-lg">Setup Instructions</h3>
+          <ul className="space-y-3">
+            {exercise.instructions.setup.map((instruction, index) => (
+              <li key={index} className="flex items-start gap-3">
+                <CheckCircle className="w-5 h-5 text-green-500 flex-shrink-0 mt-1" />
+                <span>{instruction}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      </Card>
+    </motion.div>
+  )
+}
+
+================
+File: data/exercise-content.ts
+================
+import { Exercise, Question } from '../types'
+
+export const exercises: Record<string, Exercise> = {
+  '1': {
+    id: '1',
+    name: 'Lying Face Down',
+    duration: 120, // 2 minutes
+    imageUrl: '/prone-lying.png',
+    mediaType: 'image',
+    instructions: {
+      setup: [
+        'Find a comfortable spot on the floor or bed if unable to lie on floor',
+        'Have your phone in front of you and accessible',
+        'Ensure enough space to lie flat',
+        'When you are in position and ready, press "Start Exercise" button below',
+        'The exercise should be performed for 1-2 minutes'
+      ],
+      execution: [
+        'Be mindful of how the pain is distributed',
+        'Pain reducing, or disappearing is a good sign',
+        'Pain moving out of the legs and towards the spine is a good sign'
+      ],
+      safety: [
+        'Stop if pain increases in butt or legs',
+        'Stop if symptoms move further down your legs',
+      ]
+    }
+  },
+  '2': {
+    id: '2',
+    name: "Lying Down on Elbows",
+    duration: 120, // 2 minutes
+    imageUrl: "/prone-on-elbows.png",
+    mediaType: 'image',
+    instructions: {
+      setup: [
+        "Start by lying face down",
+        "Position elbows under shoulders",
+        "Have your phone within reach",
+        "When you are in position and ready, press 'Start Exercise' button below"       
+      ],
+      execution: [
+        "Be mindful of how the pain is distributed",
+        "Pain reducing, or disappearing is a good sign",
+        "Pain moving out of the legs and towards the spine is a good sign"
+      ],
+      safety: [
+        "Stop if pain increases in butt or legs",
+        "Stop if symptoms move further into legs",
+      ]
+    }
+  },
+  '3': {
+    id: '3',
+    name: "Prone Press Up",
+    duration: 120, // 2 minutes
+    imageUrl: "/prone-press-up.mp4",
+    mediaType: 'video',
+    instructions: {
+      setup: [
+        'Start by lying face down, with hands by chest in a push up position', 
+        'While pressing up, your back, hips and legs should remain relaxed', 
+        'The goal is to let the back arch and curl up, while keeping the hips and legs relaxed',
+        'When you are in position and ready, press "Start Exercise" button below',
+        'Perform 10-15 repetitions'
+      ],
+      execution: [
+        "Be mindful of how the pain is distributed",
+        "Pain reducing, or disappearing is a good sign",
+        "Pain moving out of the legs and towards the spine is a good sign"
+      ],
+      safety: [
+        'Stop if pain increases',
+        'Stop if symptoms move further into legs',
+      ]
     }
   }
 }
 
-export class ValidationError extends AppError {
-  constructor(message: string, details?: unknown) {
-    super(message, ErrorCode.VALIDATION_ERROR, 400, details)
-    this.name = 'ValidationError'
+export const questions: Record<string, Question> = {
+  'initial': {
+    id: 'initial',
+    text: 'Wait to answer this question until you notice a change in your symptoms. How are your symptoms responding?',
+    options: [
+      { 
+        id: 'better', 
+        text: 'Better',
+        nextQuestionId: 'location'
+      },
+      { 
+        id: 'worse', 
+        text: 'Worse',
+        nextQuestionId: 'stop'
+      },
+      { 
+        id: 'same', 
+        text: 'Same',
+        nextQuestionId: 'location'
+      }
+    ]
+  },
+  'location': {
+    id: 'location',
+    text: 'Where is your pain located now?',
+    options: [
+      { 
+        id: 'central', 
+        text: 'More central/toward spine',
+        nextQuestionId: 'continue'
+      },
+      { 
+        id: 'peripheral', 
+        text: 'More peripheral/toward legs',
+        nextQuestionId: 'stop'
+      },
+      { 
+        id: 'same', 
+        text: 'Same location',
+        nextQuestionId: 'continue'
+      }
+    ]
+  },
+  'continue': {
+    id: 'continue',
+    text: 'Would you like to continue with the exercise?',
+    options: [
+      { 
+        id: 'yes', 
+        text: 'Yes',
+        nextQuestionId: null
+      },
+      { 
+        id: 'no', 
+        text: 'No',
+        nextQuestionId: 'stop'
+      }
+    ]
+  },
+  'stop': {
+    id: 'stop',
+    text: 'We should stop this exercise. Would you like to try a different position?',
+    options: [
+      { 
+        id: 'yes', 
+        text: 'Yes',
+        nextQuestionId: null
+      },
+      { 
+        id: 'no', 
+        text: 'No',
+        nextQuestionId: null
+      }
+    ]
+  },
+  'completion': {
+    id: 'completion',
+    text: 'Congratulations! You have completed the exercise series.',
+    options: [
+      { 
+        id: 'finish', 
+        text: 'Return to Dashboard',
+        nextQuestionId: null
+      }
+    ]
   }
-}
-
-export class AuthError extends AppError {
-  constructor(message: string, details?: unknown) {
-    super(message, ErrorCode.AUTH_ERROR, 401, details)
-    this.name = 'AuthError'
-  }
-}
-
-export class NotFoundError extends AppError {
-  constructor(message: string, details?: unknown) {
-    super(message, ErrorCode.NOT_FOUND, 404, details)
-    this.name = 'NotFoundError'
-  }
-}
-
-export class NetworkError extends AppError {
-  constructor(message: string, details?: unknown) {
-    super(message, ErrorCode.NETWORK_ERROR, 503, details)
-    this.name = 'NetworkError'
-  }
-}
-
-export const isAppError = (error: unknown): error is AppError => {
-  return error instanceof AppError
 }
 
 ================
-File: errors/codes.ts
+File: data/index.ts
 ================
-export enum ErrorCode {
-  // Authentication & Authorization
-  AUTH_ERROR = 'AUTH_ERROR',
-  UNAUTHORIZED = 'UNAUTHORIZED',
-  FORBIDDEN = 'FORBIDDEN',
-  TOKEN_EXPIRED = 'TOKEN_EXPIRED',
-  
-  // Validation & Data
-  VALIDATION_ERROR = 'VALIDATION_ERROR',
-  INVALID_INPUT = 'INVALID_INPUT',
-  NOT_FOUND = 'NOT_FOUND',
-  DUPLICATE_ENTRY = 'DUPLICATE_ENTRY',
-  
-  // Network & External Services
-  NETWORK_ERROR = 'NETWORK_ERROR',
-  API_ERROR = 'API_ERROR',
-  SERVICE_UNAVAILABLE = 'SERVICE_UNAVAILABLE',
-  TIMEOUT = 'TIMEOUT',
-  
-  // Database
-  DB_ERROR = 'DB_ERROR',
-  QUERY_ERROR = 'QUERY_ERROR',
-  
-  // Application
-  UNKNOWN_ERROR = 'UNKNOWN_ERROR',
-  INTERNAL_ERROR = 'INTERNAL_ERROR',
-  NOT_IMPLEMENTED = 'NOT_IMPLEMENTED'
-}
+export * from './exercise-content'
 
 ================
-File: errors/handlers.ts
+File: hooks/index.ts
 ================
-import { type ToastProps } from '@/components/ui/toast'
-import { useToast } from '@/hooks/use-toast'
-import { AppError } from './base'
-import { ErrorCode } from './codes'
+export * from './use-progression-state'
+export * from './use-timer-state'
+export * from './use-response-handler'
 
-interface ErrorToastConfig {
-  [key: string]: {
-    title: string
-    variant: ToastProps['variant']
-  }
-}
+================
+File: hooks/use-progression-state.ts
+================
+import { useState, useCallback, useEffect, useMemo } from 'react'
+import { useAuth } from '@clerk/nextjs'
+import { ExerciseProgression } from '../model'
+import { ExerciseProgressionService, ProgressionRulesService } from '../services'
+import { Exercise, ProgressionState } from '../types'
 
-const ERROR_TOAST_CONFIG: ErrorToastConfig = {
-  [ErrorCode.AUTH_ERROR]: {
-    title: 'Authentication Error',
-    variant: 'destructive',
-  },
-  [ErrorCode.VALIDATION_ERROR]: {
-    title: 'Validation Error',
-    variant: 'destructive',
-  },
-  [ErrorCode.NETWORK_ERROR]: {
-    title: 'Network Error',
-    variant: 'destructive',
-  },
-  [ErrorCode.NOT_FOUND]: {
-    title: 'Not Found',
-    variant: 'destructive',
-  },
-  DEFAULT: {
-    title: 'Error',
-    variant: 'destructive',
-  },
-}
+export function useProgressionState(initialExercises: Exercise[]) {
+  const { getToken } = useAuth()
+  const [progression] = useState(() => new ExerciseProgression(initialExercises))
+  const [state, setState] = useState<ProgressionState>({
+    id: progression.getId(),
+    exercises: initialExercises,
+    states: initialExercises.map(exercise => ({
+      id: exercise.id,
+      phase: 'setup',
+      timeRemaining: exercise.duration,
+      isTimerActive: false,
+      currentQuestionId: null,
+      answers: {},
+      visibleQuestions: []
+    })),
+    currentExerciseIndex: 0,
+    status: 'not_started'
+  })
 
-export function logError(error: unknown) {
-  if (error instanceof AppError) {
-    console.error(`[${error.code}] ${error.message}`, {
-      details: error.details,
-      timestamp: error.timestamp,
-      stack: error.stack,
-    })
-  } else {
-    console.error('Unhandled error:', error)
-  }
-}
+  const [service, setService] = useState<ExerciseProgressionService | null>(null)
+  const rulesService = useMemo(() => new ProgressionRulesService(), [])
 
-export function useErrorHandler() {
-  const { toast } = useToast()
+  // Initialize service with token
+  useEffect(() => {
+    const initService = async () => {
+      try {
+        const token = await getToken()
+        console.log('Initializing service with token:', !!token)
+        setService(new ExerciseProgressionService(token))
+      } catch (error) {
+        console.error('Failed to initialize service:', error)
+      }
+    }
+    initService()
+  }, [getToken])
 
-  return (error: unknown) => {
-    // Log the error
-    logError(error)
+  const startExercise = useCallback(() => {
+    console.log('Starting exercise, current state:', state.states[state.currentExerciseIndex])
+    try {
+      progression.startExercise()
+      setState(prev => ({
+        ...prev,
+        states: prev.states.map((state, index) => 
+          index === prev.currentExerciseIndex 
+            ? { ...state, phase: 'active', isTimerActive: true }
+            : state
+        ),
+        status: 'in_progress'
+      }))
+      console.log('Exercise started successfully')
+    } catch (error) {
+      console.error('Failed to start exercise:', error)
+    }
+  }, [progression, state.currentExerciseIndex, state.states])
 
-    // Show toast notification
-    if (error instanceof AppError) {
-      const config = ERROR_TOAST_CONFIG[error.code] || ERROR_TOAST_CONFIG.DEFAULT
-      toast({
-        title: config.title,
-        description: error.message,
-        variant: config.variant,
+  const pauseExercise = useCallback(() => {
+    console.log('Pausing exercise')
+    progression.pauseExercise()
+    setState(prev => ({
+      ...prev,
+      states: prev.states.map((state, index) => 
+        index === prev.currentExerciseIndex 
+          ? { ...state, isTimerActive: false }
+          : state
+      )
+    }))
+  }, [progression])
+
+  const submitResponse = useCallback(async (questionId: string, answerId: string) => {
+    console.log('Submitting response:', { questionId, answerId })
+    progression.submitResponse(questionId, answerId)
+    const currentState = progression.getCurrentState()
+    
+    setState(prev => ({
+      ...prev,
+      states: prev.states.map((state, index) => 
+        index === prev.currentExerciseIndex 
+          ? {
+              ...state,
+              answers: {
+                ...state.answers,
+                [questionId]: answerId
+              }
+            }
+          : state
+      )
+    }))
+
+    // Evaluate responses
+    const evaluation = rulesService.evaluateResponses(currentState.answers)
+    console.log('Response evaluation:', evaluation)
+    
+    if (evaluation.shouldStop && service) {
+      console.log('Stopping exercise due to evaluation')
+      await service.saveProgression({
+        id: state.id,
+        userId: 'current', // This will be set by the service
+        startedAt: new Date().toISOString(),
+        completedAt: new Date().toISOString(),
+        status: 'stopped_early',
+        exercises: [{
+          id: currentState.id,
+          responses: Object.entries(currentState.answers).map(([qId, aId]) => ({
+            questionId: qId,
+            answerId: aId,
+            timestamp: new Date().toISOString()
+          })),
+          startedAt: new Date().toISOString(),
+          completedAt: new Date().toISOString()
+        }]
       })
+    }
+
+    // Get next question if available
+    const nextQuestionId = rulesService.getNextQuestionId(questionId, answerId)
+    console.log('Next question:', nextQuestionId)
+    if (nextQuestionId) {
+      setState(prev => ({
+        ...prev,
+        states: prev.states.map((state, index) => 
+          index === prev.currentExerciseIndex 
+            ? {
+                ...state,
+                currentQuestionId: nextQuestionId,
+                visibleQuestions: [...state.visibleQuestions, nextQuestionId]
+              }
+            : state
+        )
+      }))
+    }
+  }, [progression, service, rulesService, state.id])
+
+  const updateTimeRemaining = useCallback((timeRemaining: number) => {
+    progression.updateTimeRemaining(timeRemaining)
+    setState(prev => ({
+      ...prev,
+      states: prev.states.map((state, index) => 
+        index === prev.currentExerciseIndex 
+          ? { ...state, timeRemaining }
+          : state
+      )
+    }))
+  }, [progression])
+
+  return {
+    state,
+    startExercise,
+    pauseExercise,
+    submitResponse,
+    updateTimeRemaining
+  }
+}
+
+================
+File: hooks/use-response-handler.ts
+================
+import { useCallback, useMemo } from 'react'
+import { useRouter } from 'next/navigation'
+import { ProgressionRulesService } from '../services'
+import { ResponseSet } from '../types'
+
+interface UseResponseHandlerProps {
+  onSubmitResponse: (questionId: string, answerId: string) => Promise<void>
+  currentResponses: ResponseSet
+}
+
+export function useResponseHandler({
+  onSubmitResponse,
+  currentResponses
+}: UseResponseHandlerProps) {
+  const router = useRouter()
+  const rulesService = useMemo(() => new ProgressionRulesService(), [])
+
+  const handleResponse = useCallback(async (questionId: string, answerId: string) => {
+    await onSubmitResponse(questionId, answerId)
+    
+    const evaluation = rulesService.evaluateResponses({
+      ...currentResponses,
+      [questionId]: answerId
+    })
+
+    if (evaluation.shouldStop) {
+      router.push('/dashboard')
+      return
+    }
+  }, [onSubmitResponse, currentResponses, rulesService, router])
+
+  const canContinue = useCallback((responses: ResponseSet) => {
+    const evaluation = rulesService.evaluateResponses(responses)
+    return evaluation.canProgress
+  }, [rulesService])
+
+  const shouldStop = useCallback((responses: ResponseSet) => {
+    const evaluation = rulesService.evaluateResponses(responses)
+    return evaluation.shouldStop
+  }, [rulesService])
+
+  const getNextQuestion = useCallback((currentQuestionId: string | null, response: string) => {
+    return rulesService.getNextQuestionId(currentQuestionId, response)
+  }, [rulesService])
+
+  return {
+    handleResponse,
+    canContinue,
+    shouldStop,
+    getNextQuestion
+  }
+}
+
+================
+File: hooks/use-timer-state.ts
+================
+import { useEffect, useCallback, useMemo } from 'react'
+import { Timer } from '../model'
+
+interface UseTimerStateProps {
+  duration: number
+  onTimeUpdate: (timeRemaining: number) => void
+  isActive: boolean
+}
+
+export function useTimerState({ 
+  duration,
+  onTimeUpdate,
+  isActive
+}: UseTimerStateProps) {
+  // Create memoized timer instance
+  const timer = useMemo(() => {
+    const timer = new Timer()
+    timer.reset(duration)
+    return timer
+  }, [duration])
+
+  // Setup timer listener
+  useEffect(() => {
+    timer.addListener(onTimeUpdate)
+    return () => timer.removeListener(onTimeUpdate)
+  }, [timer, onTimeUpdate])
+
+  // Handle timer state changes
+  useEffect(() => {
+    if (isActive) {
+      timer.start()
+    } else {
+      timer.pause()
+    }
+  }, [timer, isActive])
+
+  const startTimer = useCallback(() => {
+    timer.start()
+  }, [timer])
+
+  const pauseTimer = useCallback(() => {
+    timer.pause()
+  }, [timer])
+
+  const resetTimer = useCallback((newDuration: number) => {
+    timer.reset(newDuration)
+  }, [timer])
+
+  return {
+    startTimer,
+    pauseTimer,
+    resetTimer,
+    timeRemaining: timer.getTimeRemaining(),
+    isRunning: timer.isRunning()
+  }
+}
+
+================
+File: hooks/use-timer.ts
+================
+import { useMemo } from 'react'
+import { Timer } from '../model'
+
+export function useTimer(duration: number) {
+  const timer = useMemo(() => {
+    const timer = new Timer()
+    timer.reset(duration)
+    return timer
+  }, [duration])
+
+  return timer
+}
+
+================
+File: layout.tsx
+================
+'use client'
+
+import { ReactNode } from 'react'
+import { motion } from 'framer-motion'
+import { cn } from '@/components/ui/utils'
+
+interface ExerciseLayoutProps {
+  children: ReactNode
+  className?: string
+}
+
+export default function ExerciseLayout({ children, className }: ExerciseLayoutProps) {
+  return (
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      className={cn(
+        "min-h-[100dvh] bg-background",
+        "overscroll-y-none touch-pan-y",
+        className
+      )}
+    >
+      {/* Skip link for accessibility */}
+      <a 
+        href="#exercise-content" 
+        className="sr-only focus:not-sr-only focus:absolute focus:z-50"
+      >
+        Skip to exercise content
+      </a>
+
+      {/* Main content */}
+      <div 
+        id="exercise-content"
+        className="relative"
+      >
+        {children}
+      </div>
+    </motion.div>
+  )
+}
+
+================
+File: metadata.ts
+================
+import { Metadata } from 'next'
+
+export const metadata: Metadata = {
+  title: 'Exercise Progression',
+  description: 'Follow along with your prescribed exercise progression',
+  openGraph: {
+    title: 'Exercise Progression',
+    description: 'Follow along with your prescribed exercise progression',
+    type: 'website'
+  }
+}
+
+================
+File: model/exercise-progression.ts
+================
+import { v4 as uuidv4 } from 'uuid'
+import { 
+  Exercise,
+  ExerciseState,
+  ProgressionStatus,
+  Timer as TimerInterface
+} from '../types'
+import { Timer } from './timer'
+
+export class ExerciseProgression {
+  private readonly id: string
+  private readonly exercises: Exercise[]
+  private currentExerciseIndex: number
+  private states: ExerciseState[]
+  private status: ProgressionStatus
+  private timer: TimerInterface
+
+  constructor(exercises: Exercise[]) {
+    this.id = uuidv4()
+    this.exercises = exercises
+    this.currentExerciseIndex = 0
+    this.states = exercises.map(exercise => ({
+      id: exercise.id,
+      phase: 'setup',
+      timeRemaining: exercise.duration,
+      isTimerActive: false,
+      currentQuestionId: null,
+      answers: {},
+      visibleQuestions: []
+    }))
+    this.status = 'not_started'
+    this.timer = new Timer()
+  }
+
+  // Getters
+  public getId(): string {
+    return this.id
+  }
+
+  public getCurrentExercise(): Exercise {
+    return this.exercises[this.currentExerciseIndex]
+  }
+
+  public getCurrentState(): ExerciseState {
+    return this.states[this.currentExerciseIndex]
+  }
+
+  public getStatus(): ProgressionStatus {
+    return this.status
+  }
+
+  // State Management
+  public startExercise(): void {
+    const currentState = this.getCurrentState()
+    if (currentState.phase !== 'setup') {
+      throw new Error('Exercise must be in setup phase to start')
+    }
+
+    this.states[this.currentExerciseIndex] = {
+      ...currentState,
+      phase: 'active',
+      isTimerActive: true
+    }
+    this.status = 'in_progress'
+    this.timer.start()
+  }
+
+  public pauseExercise(): void {
+    const currentState = this.getCurrentState()
+    if (currentState.phase !== 'active') {
+      throw new Error('Exercise must be active to pause')
+    }
+
+    this.states[this.currentExerciseIndex] = {
+      ...currentState,
+      isTimerActive: false
+    }
+    this.timer.pause()
+  }
+
+  public submitResponse(questionId: string, answerId: string): void {
+    const currentState = this.getCurrentState()
+    if (currentState.phase !== 'active' && currentState.phase !== 'questions') {
+      throw new Error('Exercise must be active or in questions phase to submit response')
+    }
+
+    // Update answers
+    this.states[this.currentExerciseIndex] = {
+      ...currentState,
+      answers: {
+        ...currentState.answers,
+        [questionId]: answerId
+      }
+    }
+
+    // Evaluate if we should move to next exercise
+    if (this.shouldProgressToNextExercise()) {
+      this.progressToNextExercise()
+    }
+  }
+
+  private shouldProgressToNextExercise(): boolean {
+    const currentState = this.getCurrentState()
+    const { initial, location, continue: continueResponse } = currentState.answers
+
+    return (
+      continueResponse === 'yes' &&
+      (initial === 'better' || initial === 'same') &&
+      (location === 'central' || location === 'same')
+    )
+  }
+
+  private progressToNextExercise(): void {
+    if (this.currentExerciseIndex >= this.exercises.length - 1) {
+      this.completeProgression()
       return
     }
 
-    // Handle unknown errors
-    toast({
-      title: ERROR_TOAST_CONFIG.DEFAULT.title,
-      description: 'An unexpected error occurred',
-      variant: 'destructive',
-    })
-  }
-}
-
-// API error handler middleware
-export async function apiErrorHandler(error: unknown) {
-  if (error instanceof AppError) {
-    return new Response(JSON.stringify(error.toJSON()), {
-      status: error.status,
-      headers: { 'Content-Type': 'application/json' },
-    })
+    this.currentExerciseIndex++
+    this.timer.reset(this.getCurrentExercise().duration)
   }
 
-  const appError = new AppError(
-    'An unexpected error occurred',
-    ErrorCode.INTERNAL_ERROR,
-    500,
-    error
-  )
-  
-  return new Response(JSON.stringify(appError.toJSON()), {
-    status: 500,
-    headers: { 'Content-Type': 'application/json' },
-  })
-}
+  private completeProgression(): void {
+    this.status = 'completed'
+    this.timer.stop()
+  }
 
-================
-File: supabase/client-singleton.ts
-================
-import { createClient, SupabaseClient } from '@supabase/supabase-js'
+  // Timer Management
+  public updateTimeRemaining(timeRemaining: number): void {
+    const currentState = this.getCurrentState()
+    this.states[this.currentExerciseIndex] = {
+      ...currentState,
+      timeRemaining
+    }
 
-class SupabaseClientSingleton {
-  private static instance: SupabaseClient | null = null
-  private static currentToken: string | null = null
-
-  private constructor() {}
-
-  static async getInstance(token?: string | null): Promise<SupabaseClient> {
-    try {
-      // If instance exists and token hasn't changed, return existing instance
-      if (this.instance && token === this.currentToken) {
-        return this.instance
-      }
-
-      // Create new instance with updated token
-      this.currentToken = token || null
-      this.instance = createClient(
-        process.env.NEXT_PUBLIC_SUPABASE_URL!,
-        process.env.NEXT_PUBLIC_SUPABASE_KEY!,
-        {
-          global: {
-            headers: token ? {
-              Authorization: `Bearer ${token}`
-            } : {}
-          },
-          auth: {
-            persistSession: false
-          }
-        }
-      )
-
-      return this.instance
-    } catch (error) {
-      console.error('Error getting Supabase instance:', error)
-      throw error
+    if (timeRemaining <= 0) {
+      this.handleTimeExpired()
     }
   }
 
-  static resetInstance(): void {
-    this.instance = null
-    this.currentToken = null
-  }
-}
-
-export default SupabaseClientSingleton
-
-================
-File: supabase/client-ssr.ts
-================
-import { auth } from '@clerk/nextjs/server'
-import { createClient } from '@supabase/supabase-js'
-
-export async function createClerkSupabaseClientSsr() {
-  // The `useAuth()` hook is used to access the `getToken()` method
-  const { getToken } = await auth()
-
-  return createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_KEY!,
-    {
-      global: {
-        // Get the custom Supabase token from Clerk
-        fetch: async (url, options = {}) => {
-          const clerkToken = await getToken({
-            template: 'supabase',
-          })
-
-          // Insert the Clerk Supabase token into the headers
-          const headers = new Headers(options?.headers)
-          headers.set('Authorization', `Bearer ${clerkToken}`)
-
-          // Now call the default fetch
-          return fetch(url, {
-            ...options,
-            headers,
-          })
-        },
-      },
-    },
-  )
-}
-
-================
-File: supabase/errors/supabase.ts
-================
-// src/lib/supabase/errors/supabase.ts
-
-export class SupabaseError extends Error {
-    constructor(
-      message: string,
-      public code: string,
-      public status?: number,
-      public details?: unknown
-    ) {
-      super(message)
-      this.name = 'SupabaseError'
-    }
-  
-    static fromError(error: unknown): SupabaseError {
-      if (error instanceof SupabaseError) {
-        return error
-      }
-  
-      // PostgreSQL error codes
-      const pgErrorCodes = {
-        '23505': 'UNIQUE_VIOLATION',
-        '23503': 'FOREIGN_KEY_VIOLATION',
-        '42P01': 'UNDEFINED_TABLE',
-      }
-  
-      // Handle Supabase errors
-      if (error && typeof error === 'object' && 'code' in error) {
-        const code = error.code as string
-        const message = 'message' in error ? String(error.message) : 'Unknown error'
-        const status = 'status' in error ? Number(error.status) : undefined
-        
-        return new SupabaseError(
-          message,
-          pgErrorCodes[code as keyof typeof pgErrorCodes] || code,
-          status,
-          error
-        )
-      }
-  
-      // Handle unknown errors
-      return new SupabaseError(
-        error instanceof Error ? error.message : 'Unknown error',
-        'UNKNOWN_ERROR',
-        500,
-        error
-      )
-    }
-  }
-  
-  export const isSupabaseError = (error: unknown): error is SupabaseError => {
-    return error instanceof SupabaseError
-  }
-
-================
-File: supabase/hooks/example-hook.ts
-================
-// src/lib/supabase/hooks/test.ts
-
-import { useState, useCallback } from 'react'
-import { useAuth } from '@clerk/nextjs'
-import type { TestItem, CreateTestItem, UpdateTestItem } from '../types/example-types'
-import { testService } from '../services/example-service'
-import { SupabaseError } from '../errors/supabase'
-
-export function useTestItems() {
-  const { getToken } = useAuth()
-  const [items, setItems] = useState<TestItem[]>([])
-  const [loading, setLoading] = useState(false)
-  const [error, setError] = useState<SupabaseError | null>(null)
-
-  const fetchItems = useCallback(async () => {
-    try {
-      setLoading(true)
-      const token = await getToken({ template: 'supabase' })
-      const data = await testService.getAll(token)
-      setItems(data)
-      setError(null)
-    } catch (err) {
-      setError(SupabaseError.fromError(err))
-    } finally {
-      setLoading(false)
-    }
-  }, [getToken])
-
-  const createItem = useCallback(async (item: CreateTestItem) => {
-    try {
-      setLoading(true)
-      const token = await getToken({ template: 'supabase' })
-      const newItem = await testService.create(item, token)
-      setItems(prev => [...prev, newItem])
-      setError(null)
-      return newItem
-    } catch (err) {
-      setError(SupabaseError.fromError(err))
-      throw err
-    } finally {
-      setLoading(false)
-    }
-  }, [getToken])
-
-  const updateItem = useCallback(async (id: string, updates: UpdateTestItem) => {
-    try {
-      setLoading(true)
-      const token = await getToken({ template: 'supabase' })
-      const updated = await testService.update(id, updates, token)
-      setItems(prev => prev.map(item => item.id === id ? updated : item))
-      setError(null)
-      return updated
-    } catch (err) {
-      setError(SupabaseError.fromError(err))
-      throw err
-    } finally {
-      setLoading(false)
-    }
-  }, [getToken])
-
-  const deleteItem = useCallback(async (id: string) => {
-    try {
-      setLoading(true)
-      const token = await getToken({ template: 'supabase' })
-      await testService.delete(id, token)
-      setItems(prev => prev.filter(item => item.id !== id))
-      setError(null)
-    } catch (err) {
-      setError(SupabaseError.fromError(err))
-      throw err
-    } finally {
-      setLoading(false)
-    }
-  }, [getToken])
-
-  return {
-    items,
-    loading,
-    error,
-    fetchItems,
-    createItem,
-    updateItem,
-    deleteItem
-  }
-}
-
-================
-File: supabase/README-supa.md
-================
-// src/lib/supabase/README.md
-
-# Data Fetching Enhancements
-
-## SWR/React Query Integration
-
-When scaling the application, consider adding SWR or React Query for:
-- Automatic caching
-- Background revalidation
-- Optimistic updates
-- Request deduplication
-- Offline support
-
-### Implementation Location:
-```
-src/lib/supabase/
-  ├── hooks/              
-  │   ├── base.ts        # Add base hook with SWR/Query config
-  │   └── [domain].ts    # Domain hooks extend base hook
-```
-
-### Example Pattern:
-```typescript
-// hooks/base.ts
-import useSWR from 'swr'
-
-export function useQuery<T>(key: string, fetcher: () => Promise<T>) {
-  return useSWR(key, fetcher, {
-    revalidateOnFocus: false,
-    dedupingInterval: 2000
-  })
-}
-
-// hooks/[domain].ts
-export function useItems() {
-  const { data, error, mutate } = useQuery(
-    'items', 
-    () => itemsService.getAll()
-  )
-  // ... rest of hook logic
-}
-```
-
-Choose SWR for lighter needs, React Query for more complex requirements.
-
-================
-File: supabase/services/base.ts
-================
-// src/lib/supabase/services/base.ts
-
-import { SupabaseClient } from '@supabase/supabase-js'
-import { SupabaseError } from '../errors/supabase'
-import SupabaseClientSingleton from '../client-singleton'
-
-export abstract class BaseService {
-  protected supabase: SupabaseClient | null = null
-  
-  constructor(protected token?: string | null) {}
-  
-  protected async getClient(token?: string | null): Promise<SupabaseClient> {
-    try {
-      this.supabase = await SupabaseClientSingleton.getInstance(token)
-      return this.supabase
-    } catch (error) {
-      throw SupabaseError.fromError(error)
-    }
-  }
-
-  protected handleError(error: unknown): never {
-    throw SupabaseError.fromError(error)
-  }
-
-  protected async withErrorHandling<T>(operation: () => Promise<T>): Promise<T> {
-    try {
-      return await operation()
-    } catch (error) {
-      this.handleError(error)
+  private handleTimeExpired(): void {
+    const currentState = this.getCurrentState()
+    this.states[this.currentExerciseIndex] = {
+      ...currentState,
+      phase: 'questions',
+      isTimerActive: false
     }
   }
 }
 
 ================
-File: supabase/services/example-service.ts
+File: model/index.ts
 ================
-// src/lib/supabase/services/test.ts
+export * from './exercise-progression'
+export * from './timer'
 
-import { BaseService } from './base'
-import type { TestItem, CreateTestItem, UpdateTestItem } from '../types/example-types'
+================
+File: model/timer.ts
+================
+import { Timer as TimerInterface, TimerState } from '../types/timer.types'
 
-export class TestService extends BaseService {
-  private readonly table = 'test_items'
+export class Timer implements TimerInterface {
+  private duration: number
+  private timeRemaining: number
+  private isActive: boolean
+  private startTime: number | null
+  private listeners: ((timeRemaining: number) => void)[]
 
-  async getAll(token?: string | null): Promise<TestItem[]> {
-    return this.withErrorHandling(async () => {
-      const client = await this.getClient(token)
-      const { data, error } = await client
-        .from(this.table)
-        .select('*')
-      
-      if (error) throw error
-      return data
-    })
+  constructor() {
+    this.duration = 0
+    this.timeRemaining = 0
+    this.isActive = false
+    this.startTime = null
+    this.listeners = []
   }
 
-  async create(item: CreateTestItem, token?: string | null): Promise<TestItem> {
-    return this.withErrorHandling(async () => {
-      const client = await this.getClient(token)
-      
-      // Get the user_id from the JWT claims
-      const { data: claims, error: claimsError } = await client.rpc('requesting_user_id')
-      if (claimsError) throw claimsError
-      if (!claims) throw new Error('No user ID found in JWT claims')
-
-      // Insert with explicit user_id
-      const { data, error } = await client
-        .from(this.table)
-        .insert({ ...item, user_id: claims })
-        .select()
-        .single()
-      
-      if (error) throw error
-      return data
-    })
-  }
-
-  async update(id: string, updates: UpdateTestItem, token?: string | null): Promise<TestItem> {
-    return this.withErrorHandling(async () => {
-      const client = await this.getClient(token)
-      const { data, error } = await client
-        .from(this.table)
-        .update(updates)
-        .eq('id', id)
-        .select()
-        .single()
-      
-      if (error) throw error
-      return data
-    })
-  }
-
-  async delete(id: string, token?: string | null): Promise<void> {
-    return this.withErrorHandling(async () => {
-      const client = await this.getClient(token)
-      const { error } = await client
-        .from(this.table)
-        .delete()
-        .eq('id', id)
-      
-      if (error) throw error
-    })
-  }
-
-  async testGetUser() {
-    const client = await this.getClient()
-    const { data: { user }, error } = await client.auth.getUser()
+  public start(): void {
+    if (this.isActive) return
     
-    console.log('User data:', user);
-    console.log('Error:', error);
+    this.isActive = true
+    this.startTime = Date.now()
+    this.tick()
+  }
+
+  public pause(): void {
+    this.isActive = false
+    this.startTime = null
+  }
+
+  public stop(): void {
+    this.isActive = false
+    this.startTime = null
+    this.timeRemaining = 0
+  }
+
+  public reset(duration: number): void {
+    this.duration = duration
+    this.timeRemaining = duration
+    this.isActive = false
+    this.startTime = null
+  }
+
+  public addListener(listener: (timeRemaining: number) => void): void {
+    this.listeners.push(listener)
+  }
+
+  public removeListener(listener: (timeRemaining: number) => void): void {
+    this.listeners = this.listeners.filter(l => l !== listener)
+  }
+
+  private tick(): void {
+    if (!this.isActive || !this.startTime) return
+
+    const now = Date.now()
+    const elapsed = Math.floor((now - this.startTime) / 1000)
+    this.timeRemaining = Math.max(0, this.duration - elapsed)
+
+    // Notify listeners
+    this.listeners.forEach(listener => listener(this.timeRemaining))
+
+    // Continue ticking if time remains and timer is active
+    if (this.timeRemaining > 0 && this.isActive) {
+      requestAnimationFrame(() => this.tick())
+    } else if (this.timeRemaining <= 0) {
+      this.stop()
+    }
+  }
+
+  public getTimeRemaining(): number {
+    return this.timeRemaining
+  }
+
+  public isRunning(): boolean {
+    return this.isActive
+  }
+
+  public getState(): TimerState {
+    return {
+      duration: this.duration,
+      timeRemaining: this.timeRemaining,
+      isActive: this.isActive
+    }
   }
 }
 
-export const testService = new TestService()
+================
+File: services/exercise-progression.service.ts
+================
+import { BaseService } from '@/lib/supabase/services/base'
+import { ProgressionSnapshot } from '../types'
+
+interface BaseResponse<T> {
+  data: T | null
+  error: Error | null
+}
+
+interface ExerciseSession {
+  exercise_id: string
+  started_at: string
+  completed_at?: string
+  responses: Array<{
+    question_id: string
+    answer_id: string
+    timestamp: string
+  }>
+}
+
+interface ProgressionRecord {
+  id: string
+  user_id: string
+  started_at: string
+  completed_at?: string
+  status: string
+  exercise_sessions: ExerciseSession[]
+}
+
+export class ExerciseProgressionService extends BaseService {
+  private readonly progressionTable = 'exercise_progressions'
+  private readonly exerciseSessionsTable = 'exercise_sessions'
+  private readonly responsesTable = 'exercise_responses'
+
+  async saveProgression(progression: ProgressionSnapshot): Promise<BaseResponse<ProgressionSnapshot>> {
+    return this.withErrorHandling(async () => {
+      const client = await this.getClient(this.token)
+      
+      // First save the progression
+      const { data: progressionData, error: progressionError } = await client
+        .from(this.progressionTable)
+        .insert({
+          id: progression.id,
+          user_id: progression.userId,
+          started_at: progression.startedAt,
+          completed_at: progression.completedAt,
+          status: progression.status
+        })
+        .select()
+        .single()
+
+      if (progressionError) throw progressionError
+
+      // Then save each exercise session and its responses
+      for (const exercise of progression.exercises) {
+        const { error: sessionError } = await client
+          .from(this.exerciseSessionsTable)
+          .insert({
+            progression_id: progression.id,
+            exercise_id: exercise.id,
+            started_at: exercise.startedAt,
+            completed_at: exercise.completedAt
+          })
+
+        if (sessionError) throw sessionError
+
+        // Save responses
+        if (exercise.responses.length > 0) {
+          const { error: responsesError } = await client
+            .from(this.responsesTable)
+            .insert(
+              exercise.responses.map(response => ({
+                progression_id: progression.id,
+                exercise_id: exercise.id,
+                question_id: response.questionId,
+                answer_id: response.answerId,
+                timestamp: response.timestamp
+              }))
+            )
+
+          if (responsesError) throw responsesError
+        }
+      }
+
+      return { data: progressionData as ProgressionSnapshot, error: null }
+    })
+  }
+
+  async getProgressionHistory(userId: string): Promise<BaseResponse<ProgressionSnapshot[]>> {
+    return this.withErrorHandling(async () => {
+      const client = await this.getClient(this.token)
+      
+      const { data: progressions, error: progressionsError } = await client
+        .from(this.progressionTable)
+        .select(`
+          *,
+          exercise_sessions:${this.exerciseSessionsTable}(
+            *,
+            responses:${this.responsesTable}(*)
+          )
+        `)
+        .eq('user_id', userId)
+        .order('started_at', { ascending: false })
+
+      if (progressionsError) throw progressionsError
+
+      // Transform the data into the expected format
+      const formattedProgressions: ProgressionSnapshot[] = (progressions as ProgressionRecord[]).map(prog => ({
+        id: prog.id,
+        userId: prog.user_id,
+        startedAt: prog.started_at,
+        completedAt: prog.completed_at,
+        status: prog.status as ProgressionSnapshot['status'],
+        exercises: prog.exercise_sessions.map(session => ({
+          id: session.exercise_id,
+          startedAt: session.started_at,
+          completedAt: session.completed_at,
+          responses: session.responses.map(response => ({
+            questionId: response.question_id,
+            answerId: response.answer_id,
+            timestamp: response.timestamp
+          }))
+        }))
+      }))
+
+      return { data: formattedProgressions, error: null }
+    })
+  }
+
+  async getLatestProgression(userId: string): Promise<BaseResponse<ProgressionSnapshot | null>> {
+    return this.withErrorHandling(async () => {
+      const client = await this.getClient(this.token)
+      
+      const { data: progression, error } = await client
+        .from(this.progressionTable)
+        .select(`
+          *,
+          exercise_sessions:${this.exerciseSessionsTable}(
+            *,
+            responses:${this.responsesTable}(*)
+          )
+        `)
+        .eq('user_id', userId)
+        .order('started_at', { ascending: false })
+        .limit(1)
+        .maybeSingle()
+
+      if (error) throw error
+      if (!progression) return { data: null, error: null }
+
+      const record = progression as ProgressionRecord
+      // Transform to expected format
+      const formattedProgression: ProgressionSnapshot = {
+        id: record.id,
+        userId: record.user_id,
+        startedAt: record.started_at,
+        completedAt: record.completed_at,
+        status: record.status as ProgressionSnapshot['status'],
+        exercises: record.exercise_sessions.map(session => ({
+          id: session.exercise_id,
+          startedAt: session.started_at,
+          completedAt: session.completed_at,
+          responses: session.responses.map(response => ({
+            questionId: response.question_id,
+            answerId: response.answer_id,
+            timestamp: response.timestamp
+          }))
+        }))
+      }
+
+      return { data: formattedProgression, error: null }
+    })
+  }
+}
 
 ================
-File: supabase/setup-auth-db.md
+File: services/index.ts
 ================
-// lib/supabase.ts
-
-/**
- * IMPORTANT: Clerk + Supabase Integration Pattern
- * ----------------------------------------------
- * 
- * When using Clerk authentication with Supabase in this project:
- * 
- * 1. User IDs:
- *    - Clerk uses string IDs (e.g., "user_2rxQpCGXdYW7ZZu3Q9258lZS7o3")
- *    - Never use UUID type for user IDs in Supabase
- *    - Always use TEXT type for user_id columns
- * 
- * 2. Database Tables:
- *    ✅ DO: user_id TEXT NOT NULL
- *    ❌ DON'T: user_id UUID NOT NULL
- * 
- * 3. RLS Policies:
- *    ✅ DO: auth.jwt()->>'sub'
- *    ❌ DON'T: auth.uid()
- * 
- * 4. Storage Bucket Setup:
- *    a. Drop existing policies
- *    b. Ensure owner/owner_id columns are TEXT type
- *    c. Create policies using JWT checks:
- *       USING (
- *         bucket_id = 'your_bucket_name' AND
- *         (auth.jwt()->>'sub')::text IS NOT NULL
- *       )
- * 
- * This pattern prevents UUID/string type mismatches between 
- * Clerk's authentication and Supabase's storage/database systems.
- */
+export * from './exercise-progression.service'
+export * from './progression-rules.service'
 
 ================
-File: supabase/types/example-types.ts
+File: services/progression-rules.service.ts
 ================
-// src/lib/supabase/types/test.ts
+import { 
+  ResponseSet, 
+  ResponseEvaluation,
+} from '../types'
 
-export interface TestItem {
+export class ProgressionRulesService {
+  evaluateResponses(responses: ResponseSet): ResponseEvaluation {
+    // If no initial response yet, can't evaluate
+    if (!responses.initial) {
+      return {
+        canProgress: false,
+        shouldStop: false,
+        nextQuestionId: 'initial'
+      }
+    }
+
+    // Check for negative responses that should stop the exercise
+    if (responses.initial === 'worse') {
+      return {
+        canProgress: false,
+        shouldStop: true,
+        message: 'Exercise stopped due to worsening symptoms'
+      }
+    }
+
+    // If we have initial but no location, that's the next question
+    if (!responses.location) {
+      return {
+        canProgress: false,
+        shouldStop: false,
+        nextQuestionId: 'location'
+      }
+    }
+
+    // Check location response
+    if (responses.location === 'peripheral') {
+      return {
+        canProgress: false,
+        shouldStop: true,
+        message: 'Exercise stopped due to symptoms moving peripherally'
+      }
+    }
+
+    // If we have both responses but no continue response, that's next
+    if (!responses.continue) {
+      return {
+        canProgress: false,
+        shouldStop: false,
+        nextQuestionId: 'continue'
+      }
+    }
+
+    // Final evaluation
+    const canProgress = this.canProgressToNext(responses)
+    
+    return {
+      canProgress,
+      shouldStop: !canProgress,
+      message: canProgress 
+        ? 'Ready to progress to next exercise'
+        : 'Exercise series completed'
+    }
+  }
+
+  private canProgressToNext(responses: ResponseSet): boolean {
+    return (
+      responses.continue === 'yes' &&
+      (responses.initial === 'better' || responses.initial === 'same') &&
+      (responses.location === 'central' || responses.location === 'same')
+    )
+  }
+
+  getNextQuestionId(currentQuestionId: string | null, response: string): string | null {
+    switch (currentQuestionId) {
+      case 'initial':
+        return response === 'worse' ? 'stop' : 'location'
+      case 'location':
+        return response === 'peripheral' ? 'stop' : 'continue'
+      case 'continue':
+        return response === 'yes' ? null : 'stop'
+      case 'stop':
+        return null
+      default:
+        return 'initial'
+    }
+  }
+}
+
+================
+File: types/exercise.types.ts
+================
+export interface Exercise {
     id: string
-    created_at: string
-    content: string
+    name: string
+    duration: number
+    imageUrl: string
+    mediaType: 'image' | 'video'
+    instructions: {
+      setup: string[]
+      execution: string[]
+      safety: string[]
+    }
   }
   
-  export type CreateTestItem = Omit<TestItem, 'id' | 'created_at'>
-  export type UpdateTestItem = Partial<CreateTestItem>
+  export type ExercisePhase = 'setup' | 'active' | 'questions' | 'complete'
+  
+  export interface ExerciseState {
+    id: string
+    phase: ExercisePhase
+    timeRemaining: number
+    isTimerActive: boolean
+    currentQuestionId: string | null
+    answers: Record<string, string>
+    visibleQuestions: string[]
+  }
+
+================
+File: types/index.ts
+================
+export * from './exercise.types'
+export * from './progression.types'
+export * from './question.types'
+export * from './response.types'
+export * from './timer.types'
+
+================
+File: types/progression.types.ts
+================
+import { Exercise, ExerciseState } from './exercise.types'
+
+export type ProgressionStatus = 'not_started' | 'in_progress' | 'completed' | 'stopped_early'
+
+export interface ProgressionState {
+  id: string
+  exercises: Exercise[]
+  states: ExerciseState[]
+  currentExerciseIndex: number
+  status: ProgressionStatus
+}
+
+export interface ProgressionEvent {
+  type: 
+    | 'EXERCISE_STARTED'
+    | 'EXERCISE_PAUSED'
+    | 'EXERCISE_COMPLETED'
+    | 'RESPONSE_SUBMITTED'
+    | 'TIME_EXPIRED'
+    | 'PROGRESSION_COMPLETED'
+  payload: {
+    progressionId: string
+    exerciseId: string
+    timestamp: number
+    data?: unknown
+  }
+}
+
+export interface ProgressionSnapshot {
+  id: string
+  userId: string
+  startedAt: string
+  completedAt?: string
+  status: ProgressionStatus
+  exercises: {
+    id: string
+    responses: Array<{
+      questionId: string
+      answerId: string
+      timestamp: string
+    }>
+    startedAt: string
+    completedAt?: string
+  }[]
+}
+
+================
+File: types/question.types.ts
+================
+export interface Question {
+    id: string
+    text: string
+    options: QuestionOption[]
+  }
+  
+  export interface QuestionOption {
+    id: string
+    text: string
+    nextQuestionId?: string | null
+  }
+
+================
+File: types/response.types.ts
+================
+export type ResponseType = 'better' | 'worse' | 'same'
+export type LocationType = 'central' | 'peripheral' | 'same'
+export type ContinueType = 'yes' | 'no'
+
+export interface Response {
+  questionId: string
+  answerId: string
+  timestamp: string
+}
+
+export interface ResponseSet {
+  initial?: ResponseType
+  location?: LocationType
+  continue?: ContinueType
+  [key: string]: string | undefined
+}
+
+export interface ResponseEvaluation {
+  canProgress: boolean
+  shouldStop: boolean
+  nextQuestionId?: string | null
+  message?: string
+}
+
+export interface ResponseHistory {
+  exerciseId: string
+  responses: Response[]
+  startedAt: string
+  completedAt?: string
+}
+
+================
+File: types/timer.types.ts
+================
+export interface TimerState {
+  duration: number
+  timeRemaining: number
+  isActive: boolean
+}
+
+export interface Timer {
+  start(): void
+  pause(): void
+  stop(): void
+  reset(duration: number): void
+  addListener(listener: (timeRemaining: number) => void): void
+  removeListener(listener: (timeRemaining: number) => void): void
+  getTimeRemaining(): number
+  isRunning(): boolean
+}
 
 
 

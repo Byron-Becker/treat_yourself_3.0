@@ -1,18 +1,19 @@
 'use client'
 
+import { useEffect } from 'react'
 import { useAuth } from '@clerk/nextjs'
 import { useRouter } from 'next/navigation'
 import { Exercise } from '../types'
-import { useProgressionState, useResponseHandler } from '../hooks'
+import { useProgressionStore } from '../store/use-progression-store'
 import { ExerciseHeader } from './exercise-header'
 import { ExerciseFooter } from './exercise-footer'
 import { SetupSlide } from './slides/setup-slide'
 import { InstructionSlide } from './slides/instruction-slide'
 import { QuestionSlide } from './slides/question-slide'
 import { LoadingOverlay } from './loading-overlay'
-import { useEffect, useRef} from 'react'
-import { Timer } from '../types'
-import { useTimer } from '../hooks/use-timer'
+import { exercises } from '../data/exercise-content'
+import { useExerciseTimer } from '../hooks/use-exercise-timer'
+import { useExerciseScroll } from '../hooks/use-exercise-scroll'
 
 interface ExerciseContainerProps {
   exercise: Exercise
@@ -23,103 +24,161 @@ export function ExerciseContainer({ exercise }: ExerciseContainerProps) {
   const router = useRouter()
 
   const {
-    state,
+    exercises: exerciseStates,
+    currentExerciseIndex,
+    status,
+    initializeExercise,
     startExercise,
     pauseExercise,
     submitResponse,
-    updateTimeRemaining
-  } = useProgressionState([exercise])
+  } = useProgressionStore()
 
-  const currentExercise = state.exercises[state.currentExerciseIndex]
-  const currentState = state.states[state.currentExerciseIndex]
+  // Initialize hooks
+  useExerciseTimer()
+  const {
+    scrollToQuestion,
+    scrollToInstruction,
+    scrollToSetup,
+    getQuestionRef,
+    getInstructionRef,
+    getSetupRef,
+    scrollWithRetry
+  } = useExerciseScroll()
 
-  const { handleResponse, canContinue } = useResponseHandler({
-    onSubmitResponse: submitResponse,
-    currentResponses: currentState.answers
-  })
-
-  const timer = useTimer(exercise.duration)
-  const timerRef = useRef<Timer>(timer)
-  
+  // Initialize the first exercise
   useEffect(() => {
-    timerRef.current = timer
-  }, [timer])
+    console.log('Initializing first exercise')
+    initializeExercise(exercise)
+  }, [exercise, initializeExercise])
 
+  // Handle question appearance after 5 seconds
   useEffect(() => {
-    const handleTimeUpdate = (timeRemaining: number) => {
-      console.log('Timer update:', timeRemaining)
-      updateTimeRemaining(timeRemaining)
+    const currentExercise = exerciseStates[currentExerciseIndex]
+    if (!currentExercise) return
+
+    if (
+      currentExercise.isTimerActive && 
+      currentExercise.timeRemaining === exercise.duration - 1 &&
+      !currentExercise.currentQuestionId
+    ) {
+      console.log('Adding initial question after 5 seconds')
+      submitResponse('initial', '')
     }
+  }, [exerciseStates, currentExerciseIndex, exercise.duration, submitResponse])
 
-    timerRef.current.addListener(handleTimeUpdate)
-    return () => timerRef.current.removeListener(handleTimeUpdate)
-  }, [updateTimeRemaining])
-
+  // Handle scroll on phase changes
   useEffect(() => {
-    console.log('Timer state effect:', { isTimerActive: currentState.isTimerActive })
-    if (currentState.isTimerActive) {
-      timerRef.current.start()
-    } else {
-      timerRef.current.pause()
-    }
-  }, [currentState.isTimerActive])
+    const currentExercise = exerciseStates[currentExerciseIndex]
+    if (!currentExercise) return
 
+    if (currentExercise.phase === 'active') {
+      scrollWithRetry(() => scrollToInstruction())
+    }
+  }, [currentExerciseIndex, exerciseStates, scrollToInstruction, scrollWithRetry])
+
+  // Handle scroll on question changes
+  useEffect(() => {
+    const currentExercise = exerciseStates[currentExerciseIndex]
+    if (!currentExercise?.currentQuestionId) return
+
+    scrollWithRetry(() => scrollToQuestion(currentExercise.currentQuestionId!))
+  }, [currentExerciseIndex, exerciseStates, scrollToQuestion, scrollWithRetry])
+
+  // Handle scroll to new exercise
+  useEffect(() => {
+    const shouldScroll = useProgressionStore.getState().shouldScrollToNewExercise
+    if (shouldScroll) {
+      console.log('Scrolling to new exercise:', exerciseStates[currentExerciseIndex]?.id)
+      scrollWithRetry(() => scrollToSetup(exerciseStates[currentExerciseIndex]?.id))
+      useProgressionStore.setState({ shouldScrollToNewExercise: false })
+    }
+  }, [currentExerciseIndex, exerciseStates, scrollToSetup, scrollWithRetry])
+
+  // Handle exercise completion
+  useEffect(() => {
+    const currentExercise = exerciseStates[currentExerciseIndex]
+    if (!currentExercise) return
+
+    if (status === 'stopped_early') {
+      console.log('Exercise stopped early, redirecting to dashboard')
+      router.push('/dashboard')
+    }
+  }, [status, exerciseStates, currentExerciseIndex, router])
+
+  // Redirect if not signed in
   if (!isLoaded) return <LoadingOverlay />
   if (!isSignedIn) {
     router.push('/sign-in')
     return null
   }
 
+  const currentExercise = exerciseStates[currentExerciseIndex]
+  if (!currentExercise) return <LoadingOverlay />
+
   return (
     <div className="min-h-[100dvh] flex flex-col">
-      <ExerciseHeader 
-        name={exercise.name}
-        timeRemaining={currentState.timeRemaining}
-        isActive={currentState.isTimerActive}
-      />
+      <div className="fixed top-0 left-0 right-0 z-50 bg-white border-b">
+        <ExerciseHeader 
+          name={exercise.name}
+          timeRemaining={currentExercise.timeRemaining}
+          isActive={currentExercise.isTimerActive}
+        />
+      </div>
 
-      <main className="flex-1 overflow-y-auto px-4 pb-32 pt-4">
+      <main className="flex-1 overflow-y-auto px-4 pb-32 pt-20">
         <div className="max-w-2xl mx-auto space-y-6">
-          {currentState.phase === 'setup' && (
-            <SetupSlide
-              exercise={currentExercise}
-              state={currentState}
-              onTimerStart={startExercise}
-              onTimerStop={pauseExercise}
-              onAnswerSelected={handleResponse}
-            />
-          )}
+          {exerciseStates.map((exerciseState) => {
+            const exercise = exercises[exerciseState.id]
+            
+            return (
+              <div 
+                key={exerciseState.id} 
+                className="space-y-6"
+                ref={getSetupRef(exerciseState.id)}
+              >
+                <SetupSlide
+                  exercise={exercise}
+                  state={exerciseState}
+                  onTimerStart={startExercise}
+                  onTimerStop={pauseExercise}
+                  onAnswerSelected={submitResponse}
+                />
 
-          {currentState.phase !== 'setup' && (
-            <InstructionSlide
-              exercise={currentExercise}
-              state={currentState}
-              onTimerStart={startExercise}
-              onTimerStop={pauseExercise}
-              onAnswerSelected={handleResponse}
-            />
-          )}
+                {exerciseState.phase !== 'setup' && (
+                  <InstructionSlide
+                    ref={getInstructionRef}
+                    exercise={exercise}
+                    state={exerciseState}
+                    onTimerStart={startExercise}
+                    onTimerStop={pauseExercise}
+                    onAnswerSelected={submitResponse}
+                  />
+                )}
 
-          {currentState.visibleQuestions.map((questionId) => (
-            <QuestionSlide
-              key={questionId}
-              exercise={currentExercise}
-              state={currentState}
-              questionId={questionId}
-              onTimerStart={startExercise}
-              onTimerStop={pauseExercise}
-              onAnswerSelected={handleResponse}
-            />
-          ))}
+                {exerciseState.visibleQuestions.map((questionId) => (
+                  <QuestionSlide
+                    key={questionId}
+                    ref={getQuestionRef(questionId)}
+                    exercise={exercise}
+                    state={exerciseState}
+                    questionId={questionId}
+                    onTimerStart={startExercise}
+                    onTimerStop={pauseExercise}
+                    onAnswerSelected={submitResponse}
+                  />
+                ))}
+              </div>
+            )
+          })}
         </div>
       </main>
 
       <ExerciseFooter
-        isActive={currentState.isTimerActive}
-        timeRemaining={currentState.timeRemaining}
+        isActive={currentExercise.isTimerActive}
+        timeRemaining={currentExercise.timeRemaining}
         onStart={startExercise}
         onStop={pauseExercise}
-        canContinue={canContinue(currentState.answers)}
+        canContinue={currentExercise.phase === 'active' && currentExercise.visibleQuestions.length > 0}
       />
     </div>
   )
