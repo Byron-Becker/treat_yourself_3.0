@@ -126,14 +126,14 @@ export function ExerciseContainer({ exercise }: ExerciseContainerProps) {
       </div>
 
       <main className="flex-1 overflow-y-auto px-4 pb-32 pt-20">
-        <div className="max-w-2xl mx-auto space-y-6">
+        <div className="max-w-2xl mx-auto">
           {exerciseStates.map((exerciseState) => {
             const exercise = exercises[exerciseState.id]
             
             return (
               <div 
                 key={exerciseState.id} 
-                className="space-y-6"
+                className="mb-6"
                 ref={getSetupRef(exerciseState.id)}
               >
                 <SetupSlide
@@ -145,27 +145,30 @@ export function ExerciseContainer({ exercise }: ExerciseContainerProps) {
                 />
 
                 {exerciseState.phase !== 'setup' && (
-                  <InstructionSlide
-                    ref={getInstructionRef}
-                    exercise={exercise}
-                    state={exerciseState}
-                    onTimerStart={startExercise}
-                    onTimerStop={pauseExercise}
-                    onAnswerSelected={submitResponse}
-                  />
+                  <div className="mt-6">
+                    <InstructionSlide
+                      ref={getInstructionRef}
+                      exercise={exercise}
+                      state={exerciseState}
+                      onTimerStart={startExercise}
+                      onTimerStop={pauseExercise}
+                      onAnswerSelected={submitResponse}
+                    />
+                  </div>
                 )}
 
                 {exerciseState.visibleQuestions.map((questionId) => (
-                  <QuestionSlide
-                    key={questionId}
-                    ref={getQuestionRef(questionId)}
-                    exercise={exercise}
-                    state={exerciseState}
-                    questionId={questionId}
-                    onTimerStart={startExercise}
-                    onTimerStop={pauseExercise}
-                    onAnswerSelected={submitResponse}
-                  />
+                  <div key={questionId} className="mt-6">
+                    <QuestionSlide
+                      ref={getQuestionRef(questionId)}
+                      exercise={exercise}
+                      state={exerciseState}
+                      questionId={questionId}
+                      onTimerStart={startExercise}
+                      onTimerStop={pauseExercise}
+                      onAnswerSelected={submitResponse}
+                    />
+                  </div>
                 ))}
               </div>
             )
@@ -173,13 +176,15 @@ export function ExerciseContainer({ exercise }: ExerciseContainerProps) {
         </div>
       </main>
 
-      <ExerciseFooter
-        isActive={currentExercise.isTimerActive}
-        timeRemaining={currentExercise.timeRemaining}
-        onStart={startExercise}
-        onStop={pauseExercise}
-        canContinue={currentExercise.phase === 'active' && currentExercise.visibleQuestions.length > 0}
-      />
+      <div className="fixed bottom-0 left-0 right-0 z-50 bg-white border-t">
+        <ExerciseFooter
+          isActive={currentExercise.isTimerActive}
+          timeRemaining={currentExercise.timeRemaining}
+          onStart={startExercise}
+          onStop={pauseExercise}
+          canContinue={currentExercise.phase === 'active' && currentExercise.visibleQuestions.length > 0}
+        />
+      </div>
     </div>
   )
 } 

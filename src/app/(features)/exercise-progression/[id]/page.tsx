@@ -10,7 +10,7 @@ interface PageProps {
 }
 
 export default async function ExercisePage({ params }: PageProps) {
-  const exercise = exercises[params.id]
+  const exercise = await exercises[params.id]
 
   if (!exercise) {
     notFound()

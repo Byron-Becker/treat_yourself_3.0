@@ -15,28 +15,20 @@ export function useExerciseScroll() {
 
   const scrollToElement = useCallback((element: HTMLElement | null) => {
     if (!element) return
-    
-    const headerHeight = 64 // Approximate header height
-    const footerHeight = 80 // Approximate footer height
-    const windowHeight = window.innerHeight
-    const elementRect = element.getBoundingClientRect()
-    
-    // Calculate the ideal scroll position
-    const scrollPosition = 
-      window.scrollY + 
-      elementRect.top - 
-      headerHeight - 
-      (windowHeight - elementRect.height - footerHeight) / 2
-    
+
+    const offset = 80 // Fixed offset for header
+    const elementPosition = element.getBoundingClientRect().top + window.scrollY - offset
+
     window.scrollTo({
-      top: Math.max(0, scrollPosition),
+      top: elementPosition,
       behavior: 'smooth'
     })
   }, [])
 
   const scrollToQuestion = useCallback((questionId: string) => {
-    if (refs.current.questions[questionId]) {
-      scrollToElement(refs.current.questions[questionId])
+    const element = refs.current.questions[questionId]
+    if (element) {
+      scrollToElement(element)
     }
   }, [scrollToElement])
 
@@ -45,8 +37,9 @@ export function useExerciseScroll() {
   }, [scrollToElement])
 
   const scrollToSetup = useCallback((exerciseId: string) => {
-    if (refs.current.setup[exerciseId]) {
-      scrollToElement(refs.current.setup[exerciseId])
+    const element = refs.current.setup[exerciseId]
+    if (element) {
+      scrollToElement(element)
     }
   }, [scrollToElement])
 
@@ -66,12 +59,9 @@ export function useExerciseScroll() {
     }
   ), [])
 
+  // Single attempt scroll with a small delay
   const scrollWithRetry = useCallback((scrollFn: () => void) => {
-    // Initial scroll
-    setTimeout(scrollFn, 100)
-    // Retry scrolls to handle dynamic content
-    setTimeout(scrollFn, 300)
-    setTimeout(scrollFn, 500)
+    setTimeout(scrollFn, 50)
   }, [])
 
   return {

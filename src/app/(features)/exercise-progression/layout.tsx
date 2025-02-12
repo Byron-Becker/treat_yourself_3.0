@@ -18,8 +18,13 @@ export default function ExerciseLayout({ children, className }: ExerciseLayoutPr
       className={cn(
         "min-h-[100dvh] bg-background",
         "overscroll-y-none touch-pan-y",
+        "overflow-x-hidden",
         className
       )}
+      style={{
+        scrollBehavior: 'smooth',
+        WebkitOverflowScrolling: 'touch'
+      }}
     >
       {/* Skip link for accessibility */}
       <a 
@@ -32,7 +37,7 @@ export default function ExerciseLayout({ children, className }: ExerciseLayoutPr
       {/* Main content */}
       <div 
         id="exercise-content"
-        className="relative"
+        className="relative scroll-smooth"
       >
         {children}
       </div>
