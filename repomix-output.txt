@@ -45,2333 +45,1351 @@ Additional Info:
 ================================================================
 Directory Structure
 ================================================================
-[lessonId]/components/__tests__/lesson-container.integration.test.tsx
-[lessonId]/components/image-error-boundary.tsx
-[lessonId]/components/lesson-container.tsx
-[lessonId]/components/lesson-header.tsx
-[lessonId]/components/loading-overlay.tsx
-[lessonId]/components/slides/info-bullet-slide.tsx
-[lessonId]/components/slides/info-slide.tsx
-[lessonId]/components/slides/question-slide.tsx
-[lessonId]/layout.tsx
-[lessonId]/page.tsx
-actions/lesson-completion.ts
-data/exercise-content.ts
-data/posture-content.ts
-hooks/__tests__/use-lesson-completion.test.ts
-hooks/use-lesson-completion.ts
-hooks/use-lesson-progress.ts
-hooks/use-lesson.ts
-hooks/use-slide-interaction.ts
-hooks/use-viewport-scroll.ts
-model/__tests__/lesson-progress.test.ts
-model/__tests__/slide-interaction.test.ts
-model/__tests__/viewport-state.test.ts
-model/lesson-progress.ts
-model/slide-interaction.ts
-model/viewport-state.ts
-services/__tests__/lesson-completion.service.test.ts
-services/__tests__/use-lesson-completion.test.ts
-services/lesson-completion.service.ts
-services/lesson.service.ts
-types/db.types.ts
-types/lesson.types.ts
+components/course-card.tsx
+components/course-grid.tsx
+components/dashboard-layout.tsx
+components/nav-bar.tsx
+components/progress-overview.tsx
+components/streak-display.tsx
+components/task-list.tsx
+hooks/__tests__/use-dashboard-state.test.ts
+hooks/use-dashboard-state.ts
+hooks/use-progress-tracking.ts
+hooks/use-user-activity.ts
+index.tsx
+layout.tsx
+model/dashboard-state.ts
+model/progress-tracking.ts
+model/user-activity.ts
+page.tsx
+services/__tests__/dashboard.service.test.ts
+services/activity.service.ts
+services/dashboard.service.ts
+services/progress.service.ts
+types/api.types.ts
+types/dashboard.types.ts
+types/progress.types.ts
+types/service.types.ts
 
 ================================================================
 Files
 ================================================================
 
 ================
-File: [lessonId]/components/__tests__/lesson-container.integration.test.tsx
+File: components/course-card.tsx
 ================
-// features/lessons/components/__tests__/lesson-container.integration.test.tsx
+import { Card, CardContent } from "@/components/ui/card"
+import { Button } from "@/components/ui/button"
+import Link from "next/link"
+import { cn } from "@/components/ui/utils"
 
-import { render, screen, fireEvent, waitFor } from '@testing-library/react'
-import { LessonContainer } from '../lesson-container'
-import { useLesson } from '../../../hooks/use-lesson'
-import { useLessonCompletion } from '../../../hooks/use-lesson-completion'
-
-
-jest.mock('../../../hooks/use-lesson')
-jest.mock('../../../hooks/use-lesson-completion')
-
-
-describe('LessonContainer Integration', () => {
-  const mockLessonId = 'lesson-1'
-  const mockSlides = [
-    { id: 'slide-1', type: 'info', title: 'First Slide', body: 'Content 1' },
-    { id: 'slide-2', type: 'info', title: 'Last Slide', body: 'Content 2' }
-  ]
-
-  beforeEach(() => {
-    jest.clearAllMocks()
-    
-    // Mock useLesson default state
-    ;(useLesson as jest.Mock).mockReturnValue({
-      lesson: { id: mockLessonId, slides: mockSlides },
-      visibleSlides: mockSlides,
-      currentIndex: 0,
-      completedSlides: new Set(),
-      loading: false,
-      completeSlide: jest.fn(),
-      scrollToSlide: jest.fn(),
-      updateSlidePosition: jest.fn()
-    })
-
-    // Mock useLessonCompletion default state
-    ;(useLessonCompletion as jest.Mock).mockReturnValue({
-      complete: jest.fn(),
-      isCompleting: false,
-      error: null
-    })
-  })
-
-  it('should complete lesson when all slides are finished', async () => {
-    const mockComplete = jest.fn()
-    const mockCompleteSlide = jest.fn()
-
-    ;(useLessonCompletion as jest.Mock).mockReturnValue({
-      complete: mockComplete,
-      isCompleting: false
-    })
-
-    ;(useLesson as jest.Mock).mockReturnValue({
-      lesson: { id: mockLessonId, slides: mockSlides },
-      visibleSlides: mockSlides,
-      currentIndex: mockSlides.length - 1,
-      completedSlides: new Set([mockSlides[0].id]),
-      loading: false,
-      completeSlide: mockCompleteSlide,
-      scrollToSlide: jest.fn(),
-      updateSlidePosition: jest.fn()
-    })
-
-    render(<LessonContainer lessonId={mockLessonId} />)
-
-    // Click continue on last slide
-    const continueButton = screen.getByText('Continue')
-    fireEvent.click(continueButton)
-
-    await waitFor(() => {
-      expect(mockCompleteSlide).toHaveBeenCalledWith(mockSlides[1].id)
-      expect(mockComplete).toHaveBeenCalled()
-    })
-  })
-
-  it('should show loading state when completing lesson', async () => {
-    ;(useLessonCompletion as jest.Mock).mockReturnValue({
-      complete: jest.fn(),
-      isCompleting: true
-    })
-
-    render(<LessonContainer lessonId={mockLessonId} />)
-    expect(screen.getByText('Loading...')).toBeInTheDocument()
-  })
-
-  it('should handle slide progression correctly', async () => {
-    const mockScrollToSlide = jest.fn()
-    
-    // Show only first slide
-    ;(useLesson as jest.Mock).mockReturnValue({
-      lesson: { id: mockLessonId, slides: mockSlides },
-      visibleSlides: [mockSlides[0]], // Only show first slide
-      currentIndex: 0,
-      completedSlides: new Set(),
-      loading: false,
-      completeSlide: jest.fn(),
-      scrollToSlide: mockScrollToSlide,
-      updateSlidePosition: jest.fn()
-    })
-
-    render(<LessonContainer lessonId={mockLessonId} />)
-
-    const continueButton = screen.getByText('Continue')
-    fireEvent.click(continueButton)
-
-    await waitFor(() => {
-      expect(mockScrollToSlide).toHaveBeenCalledWith(mockSlides[0].id)
-    })
-  })
-//   it('should handle errors during lesson completion', async () => {
-//     const mockError = new Error('Failed to complete lesson')
-//     const mockComplete = jest.fn().mockRejectedValue(mockError)
-  
-//     ;(useLessonCompletion as jest.Mock).mockReturnValue({
-//       complete: mockComplete,
-//       isCompleting: false,
-//       error: mockError
-//     })
-  
-//     render(<LessonContainer lessonId={mockLessonId} />)
-  
-//     const continueButton = screen.getByText('Continue')
-//     fireEvent.click(continueButton)
-  
-//     await waitFor(() => {
-//       expect(mockComplete).toHaveBeenCalled()
-//     })
-//   })
-})
-
-================
-File: [lessonId]/components/image-error-boundary.tsx
-================
-// app/lessons/[lessonId]/components/image-error-boundary.tsx
-
-'use client'
-
-import React from 'react'
-import { ImageOff } from 'lucide-react'
-import { Button } from '@/components/ui/button'
-
-interface Props {
-  children: React.ReactNode
+interface CourseCardProps {
+  subject: string
+  level: number
+  title: string
+  icon: React.ReactNode
+  color: string
+  href: string
+  disabled?: boolean
 }
 
-interface State {
-  hasError: boolean
-}
-
-export class ImageErrorBoundary extends React.Component<Props, State> {
-  constructor(props: Props) {
-    super(props)
-    this.state = { hasError: false }
-  }
-
-  static getDerivedStateFromError() {
-    return { hasError: true }
-  }
-
-  render() {
-    if (this.state.hasError) {
-      return (
-        <div className="w-full h-full flex flex-col items-center justify-center gap-4 bg-muted rounded-lg p-8">
-          <ImageOff className="h-12 w-12 text-muted-foreground" />
-          <p className="text-sm text-muted-foreground">Failed to load image</p>
-          <Button 
-            variant="outline" 
-            size="sm"
-            onClick={() => this.setState({ hasError: false })}
-          >
-            Retry
-          </Button>
+export function CourseCard({ 
+  subject, 
+  level, 
+  title, 
+  icon, 
+  color, 
+  href, 
+  disabled 
+}: CourseCardProps) {
+  const content = (
+    <Card className={cn(
+      "w-full transition-all",
+      disabled ? "opacity-50 cursor-not-allowed" : "hover:shadow-md"
+    )}>
+      <CardContent className="p-6">
+        <div className="mb-4">{icon}</div>
+        <div className={cn("text-sm mb-2", color)}>
+          {subject} · LEVEL {level}
         </div>
-      )
-    }
+        <h3 className="font-semibold text-lg">{title}</h3>
+        <Button 
+          variant="default" 
+          className="w-full mt-4 bg-black text-white hover:bg-black/90 md:hidden"
+          disabled={disabled}
+        >
+          {disabled ? 'Complete initial exam first' : 'Start lesson'}
+        </Button>
+      </CardContent>
+    </Card>
+  )
 
-    return this.props.children
+  if (disabled) {
+    return content
   }
-}
-
-================
-File: [lessonId]/components/lesson-container.tsx
-================
-// app/lessons/[lessonId]/components/lesson-container.tsx
-
-'use client'
-
-import { useLesson } from '../../hooks/use-lesson'
-import { InfoSlide } from '../components/slides/info-slide'
-import { QuestionSlide } from '../components/slides/question-slide'
-import { InfoBulletSlide } from '../components/slides/info-bullet-slide'
-import { cn } from '@/components/ui/utils'
-import { memo, useEffect, useRef } from 'react'
-import type { Slide } from '../../types/lesson.types'
-import { useLessonCompletion } from '../../hooks/use-lesson-completion'
-
-interface LessonContainerProps {
-  lessonId: string
-}
-
-interface SlideWrapperProps {
-  slide: Slide
-  index: number
-  currentIndex: number
-  completedSlides: Set<string>
-  interactionState: string
-  handleAnswer: (optionId: string, correctOptionId: string) => void
-  completeSlide: (slideId: string) => void
-  scrollToSlide: (slideId: string) => void
-  updateSlidePosition: (slideId: string, bounds: { top: number; bottom: number }) => void
-}
-
-const SlideWrapper = memo(function SlideWrapper({ 
-  slide, 
-  index,
-  currentIndex,
-  completedSlides,
-  interactionState,
-  handleAnswer,
-  completeSlide,
-  scrollToSlide,
-  updateSlidePosition 
-}: SlideWrapperProps) {
-  const prevBoundsRef = useRef<{ top: number; bottom: number } | null>(null);
 
   return (
-    <div 
-      className="slide-item"
-      ref={el => {
-        if (el) {
-          const bounds = el.getBoundingClientRect();
-          const prevBounds = prevBoundsRef.current;
-          if (!prevBounds || prevBounds.top !== bounds.top || prevBounds.bottom !== bounds.bottom) {
-            updateSlidePosition(slide.id, {
-              top: bounds.top,
-              bottom: bounds.bottom
-            });
-            prevBoundsRef.current = bounds;
-          }
-        }
-      }}
+    <Link href={href} className="block">
+      {content}
+    </Link>
+  )
+}
+
+================
+File: components/course-grid.tsx
+================
+'use client'
+
+import { useDashboardState } from "../hooks/use-dashboard-state"
+import { CourseCard } from "./course-card"
+import { ArrowUpRight, Timer } from "lucide-react"
+
+export function CourseGrid() {
+  const { canAccessLessons, isLoading } = useDashboardState()
+
+  if (isLoading) {
+    return <CourseGridSkeleton />
+  }
+
+  return (
+    <div className="space-y-4">
+      <h2 className="text-xl font-semibold">Available Lessons</h2>
+      <div className="grid gap-4">
+        <CourseCard
+          subject="POSTURE"
+          level={1}
+          title="Understanding Good Posture"
+          icon={<ArrowUpRight className="w-8 h-8 text-blue-500" />}
+          color="text-blue-500"
+          href="/lessons/posture-lesson"
+          disabled={!canAccessLessons}
+        />
+        <CourseCard
+          subject="EXERCISE"
+          level={1}
+          title="Exercise Fundamentals"
+          icon={<Timer className="w-8 h-8 text-purple-500" />}
+          color="text-purple-500"
+          href="/lessons/exercise-lesson"
+          disabled={!canAccessLessons}
+        />
+      </div>
+    </div>
+  )
+}
+
+function CourseGridSkeleton() {
+  return (
+    <div className="space-y-4 animate-pulse">
+      {/* Skeleton content */}
+    </div>
+  )
+}
+
+================
+File: components/dashboard-layout.tsx
+================
+'use client'
+
+import { NavBar } from "./nav-bar"
+import { StreakDisplay } from "./streak-display"
+import { TaskList } from "./task-list"
+import { CourseGrid } from "./course-grid"
+import { ProgressOverview } from "./progress-overview"
+
+export function DashboardLayout() {
+  return (
+    <>
+      <NavBar />
+      <main className="container mx-auto p-4 md:p-6 max-w-5xl mt-16">
+        <div className="grid md:grid-cols-2 gap-6">
+          <div className="space-y-6">
+            <TaskList />
+            <ProgressOverview />
+            <StreakDisplay />
+          </div>
+          <CourseGrid />
+        </div>
+      </main>
+    </>
+  )
+}
+
+================
+File: components/nav-bar.tsx
+================
+'use client'
+
+import Image from "next/image"
+import Link from "next/link"
+import { UserButton } from "@clerk/nextjs"
+import { cn } from "@/components/ui/utils"
+
+export function NavBar() {
+  return (
+    <nav className="fixed top-0 left-0 right-0 bg-white border-b z-50">
+      <div className="container mx-auto px-4">
+        <div className="flex items-center justify-between h-16">
+          {/* Logo and Main Nav */}
+          <div className="flex items-center gap-8">
+            <Link href="/" className="hidden md:block">
+              <Image 
+                src="/logo.png"
+                alt="Logo"
+                width={120}
+                height={40}
+                priority
+              />
+            </Link>
+            <div className="flex gap-6">
+              <NavLink href="/" active>
+                Home
+              </NavLink>
+              <NavLink href="/insights">
+                Insights
+              </NavLink>
+              <NavLink href="/logs">
+                Logs
+              </NavLink>
+            </div>
+          </div>
+
+          {/* User Menu */}
+          <div className="flex items-center gap-4">
+            <UserButton afterSignOutUrl="/" />
+          </div>
+        </div>
+      </div>
+    </nav>
+  )
+}
+
+interface NavLinkProps {
+  href: string
+  children: React.ReactNode
+  active?: boolean
+}
+
+function NavLink({ href, children, active }: NavLinkProps) {
+  return (
+    <Link 
+      href={href} 
+      className={cn(
+        "text-sm font-medium transition-colors",
+        active ? "text-foreground" : "text-muted-foreground hover:text-foreground"
+      )}
     >
-      {slide.type === 'info' && (
-        <InfoSlide
-          content={slide}
-          isActive={index === currentIndex}
-          isCompleted={completedSlides.has(slide.id)}
-          onComplete={() => {
-            completeSlide(slide.id)
-            setTimeout(() => {
-              scrollToSlide(slide.id);
-            }, 100);
-          }}
-        />
-      )}
+      {children}
+    </Link>
+  )
+}
 
-      {slide.type === 'question' && (
-        <QuestionSlide
-          content={slide}
-          isActive={index === currentIndex}
-          isCompleted={completedSlides.has(slide.id)}
-          interactionState={interactionState}
-          onAnswer={handleAnswer}
-          onComplete={() => {
-            completeSlide(slide.id)
-            setTimeout(() => {
-              scrollToSlide(slide.id);
-            }, 100);
-          }}
-        />
-      )}
+================
+File: components/progress-overview.tsx
+================
+'use client'
 
-      {slide.type === 'infoBullet' && (
-        <InfoBulletSlide
-          content={slide}
-          isActive={index === currentIndex}
-          isCompleted={completedSlides.has(slide.id)}
-          onComplete={() => {
-            completeSlide(slide.id)
-            setTimeout(() => {
-              scrollToSlide(slide.id);
-            }, 100);
-          }}
+import { Card, CardContent } from "@/components/ui/card"
+import { useDashboardState } from "../hooks/use-dashboard-state"
+import { BadgeCheck, Clock } from "lucide-react"
+
+export function ProgressOverview() {
+  const { state, isLoading } = useDashboardState()
+
+  if (isLoading) {
+    return <ProgressOverviewSkeleton />
+  }
+
+  const totalLessons = 2 // Hardcoded for now
+  const completedLessons = Object.values(state.lessonCompletions).length
+
+  return (
+    <Card>
+      <CardContent className="p-6">
+        <h2 className="text-xl font-semibold mb-4">Your Progress</h2>
+        <div className="grid grid-cols-2 gap-4">
+          <div className="space-y-2">
+            <div className="flex items-center gap-2">
+              <BadgeCheck className="h-5 w-5 text-green-500" />
+              <span className="text-sm text-muted-foreground">Completed</span>
+            </div>
+            <p className="text-2xl font-bold">{completedLessons}</p>
+          </div>
+          <div className="space-y-2">
+            <div className="flex items-center gap-2">
+              <Clock className="h-5 w-5 text-blue-500" />
+              <span className="text-sm text-muted-foreground">Remaining</span>
+            </div>
+            <p className="text-2xl font-bold">{totalLessons - completedLessons}</p>
+          </div>
+        </div>
+      </CardContent>
+    </Card>
+  )
+}
+
+function ProgressOverviewSkeleton() {
+  return (
+    <Card>
+      <CardContent className="p-6 animate-pulse">
+        {/* Skeleton content */}
+      </CardContent>
+    </Card>
+  )
+}
+
+================
+File: components/streak-display.tsx
+================
+// features/dashboard/components/streak-display.tsx
+'use client'
+
+import { Card, CardContent } from "@/components/ui/card"
+import { useProgressTracking } from "../hooks/use-progress-tracking"
+import { Zap } from "lucide-react"
+import { cn } from "@/components/ui/utils"
+
+export function StreakDisplay() {
+  const { streakData, isLoading } = useProgressTracking()
+
+  if (isLoading) {
+    return <StreakDisplaySkeleton />
+  }
+
+  const today = new Date().toISOString().split('T')[0]
+  const days = [
+    { label: "Mon", date: getDateForDay(1) },
+    { label: "Tue", date: getDateForDay(2) },
+    { label: "Wed", date: getDateForDay(3) },
+    { label: "Thu", date: getDateForDay(4) },
+    { label: "Fri", date: getDateForDay(5) },
+    { label: "Sat", date: getDateForDay(6) },
+    { label: "Sun", date: getDateForDay(0) },
+  ].map(day => ({
+    ...day,
+    isActive: streakData.dates.includes(day.date),
+    isToday: day.date === today
+  }))
+
+  return (
+    <Card>
+      <CardContent className="p-6">
+        <div className="flex justify-between items-center mb-6">
+          <h2 className="text-xl font-semibold">Daily Check-in</h2>
+          <div className="flex items-center gap-2">
+            <span className="text-3xl font-bold">{streakData.currentStreak}</span>
+            <Zap className={cn(
+              "h-6 w-6",
+              streakData.currentStreak > 0 ? "text-yellow-500" : "text-gray-200"
+            )} />
+          </div>
+        </div>
+
+        <div className="flex justify-between">
+          {days.map((day) => (
+            <div key={day.label} className="flex flex-col items-center">
+              <div className={cn(
+                "w-10 h-10 rounded-full border-2 flex items-center justify-center mb-2",
+                day.isActive ? "border-primary bg-primary/10" : "border-gray-200",
+                day.isToday && "ring-2 ring-offset-2 ring-primary"
+              )}>
+                <Zap className={cn(
+                  "h-5 w-5",
+                  day.isActive ? "text-primary" : "text-gray-200"
+                )} />
+              </div>
+              <span className={cn(
+                "text-sm",
+                day.isToday ? "font-semibold" : "text-muted-foreground"
+              )}>
+                {day.label}
+              </span>
+            </div>
+          ))}
+        </div>
+      </CardContent>
+    </Card>
+  )
+}
+
+function StreakDisplaySkeleton() {
+  return (
+    <Card>
+      <CardContent className="p-6 animate-pulse">
+        {/* Skeleton content */}
+      </CardContent>
+    </Card>
+  )
+}
+
+function getDateForDay(dayNumber: number): string {
+  const today = new Date()
+  const currentDay = today.getDay()
+  let diff = dayNumber - currentDay
+  if (dayNumber === 0) {
+    diff = 7 - currentDay
+  }
+  const targetDate = new Date(today)
+  targetDate.setDate(today.getDate() + diff)
+  return targetDate.toISOString().split('T')[0]
+}
+
+================
+File: components/task-list.tsx
+================
+'use client'
+
+import { Check } from "lucide-react"
+import Link from "next/link"
+import { useDashboardState } from "../hooks/use-dashboard-state"
+import { useUserActivity } from "../hooks/use-user-activity"
+
+export function TaskList() {
+  const { state, canAccessLessons, canAccessExercises } = useDashboardState()
+  const { needsAssessment } = useUserActivity()
+
+  const today = new Date().toISOString().split('T')[0]
+  const hasCompletedTodaysExercise = state.exerciseState.lastCompletedAt === today
+
+  return (
+    <div className="p-6 bg-green-50 rounded-lg border border-green-200">
+      <h3 className="font-semibold text-xl mb-4">Your To-Do List</h3>
+      <div className="space-y-3">
+        <TaskItem
+          isCompleted={state.initialExam.isCompleted}
+          label="Complete your initial exam"
+          href="/initial-exam"
+          disabledLabel="Complete your initial exam"
         />
+
+        <TaskItem
+          isCompleted={state.lessonCompletions['exercise-lesson']?.isCompleted}
+          label="Complete exercise lesson"
+          href="/lessons/exercise-lesson"
+          disabled={!canAccessLessons}
+          disabledLabel="Complete initial exam first"
+        />
+
+        <TaskItem
+          isCompleted={hasCompletedTodaysExercise}
+          label="Complete your daily exercise"
+          href="/exercise-progression/1"
+          disabled={!canAccessExercises}
+          disabledLabel="Complete exercise lesson first"
+        />
+
+        <TaskItem
+          isCompleted={!needsAssessment}
+          label="Complete Movement Analysis"
+          href="/range-of-motion"
+          disabled={!canAccessExercises}
+          disabledLabel="Complete exercise lesson first"
+        />
+      </div>
+    </div>
+  )
+}
+
+interface TaskItemProps {
+  isCompleted: boolean
+  label: string
+  href: string
+  disabled?: boolean
+  disabledLabel?: string
+}
+
+function TaskItem({ isCompleted, label, href, disabled, disabledLabel }: TaskItemProps) {
+  return (
+    <div className="flex items-center gap-3">
+      <div className={`w-5 h-5 rounded-full flex items-center justify-center
+        ${isCompleted ? 'bg-green-500' : 'border-2 border-gray-300'}`}>
+        {isCompleted && <Check className="w-3 h-3 text-white" />}
+      </div>
+      
+      {isCompleted ? (
+        <span className="text-gray-600 line-through">{label}</span>
+      ) : disabled ? (
+        <span className="text-gray-400">{disabledLabel}</span>
+      ) : (
+        <Link href={href} className="text-blue-600 hover:underline">
+          {label}
+        </Link>
       )}
     </div>
   )
-})
-
-export function LessonContainer({ lessonId }: LessonContainerProps) {
-  const {
-    lesson,
-    visibleSlides,
-    currentIndex,
-    completedSlides,
-    
-    interactionState,
-    handleAnswer,
-    completeSlide,
-    scrollToSlide,
-    updateSlidePosition,
-    lastScrollPosition,
-    activeSlideId
-  } = useLesson(lessonId)
-
-  const { complete} = useLessonCompletion(lessonId)
-
-  // Handle final slide completion
-  const handleFinalSlideCompletion = async (slideId: string) => {
-    try {
-      // Complete the slide first
-      completeSlide(slideId)
-      
-      // If this was the last slide, attempt to mark as complete
-      if (currentIndex === visibleSlides.length - 1) {
-        try {
-          await complete()
-        } catch (error) {
-          // Silently ignore duplicate completion errors
-          // Still log other errors
-          if (error instanceof Error && !error.message?.includes('duplicate key')) {
-            console.error('Error completing lesson:', error)
-          }
-        }
-      }
-      
-      // Scroll to next slide if available
-      setTimeout(() => {
-        scrollToSlide(currentIndex + 1)
-      }, 100)
-    } catch (error) {
-      console.error('Error completing slide:', error)
-    }
-  }
-
-  useEffect(() => {
-    
-  }, [lesson]);
-
-  useEffect(() => {
-    
-  }, [visibleSlides]);
-
-  useEffect(() => {
-    
-  }, [currentIndex]);
-
-  useEffect(() => {
-    
-  }, [completedSlides]);
-
-  useEffect(() => {
-    
-  }, [interactionState]);
-
-  useEffect(() => {
-    
-  }, [activeSlideId]);
-
-  useEffect(() => {
-    
-  }, [lastScrollPosition]);
-
-  if (!lesson) return null
-
-  return (
-    <main className={cn(
-      "w-full max-w-2xl mx-auto",
-      "space-y-6 py-6",
-      "mt-16"
-    )}>
-
-      {visibleSlides?.map((slide, index) => (
-        <SlideWrapper
-          key={slide.id}
-          slide={slide}
-          index={index}
-          currentIndex={currentIndex}
-          completedSlides={completedSlides}
-          interactionState={interactionState}
-          handleAnswer={handleAnswer}
-          completeSlide={handleFinalSlideCompletion}
-          // @ts-expect-error - scrollToSlide is not typed
-          scrollToSlide={scrollToSlide}
-          updateSlidePosition={updateSlidePosition}
-        />
-      ))}
-    </main>
-  )
 }
 
 ================
-File: [lessonId]/components/lesson-header.tsx
+File: hooks/__tests__/use-dashboard-state.test.ts
 ================
-// app/lessons/[lessonId]/components/lesson-header.tsx
-
-'use client'
-
-import { ArrowLeft, CheckCircle } from 'lucide-react'
-import { Button } from '@/components/ui/button'
-import { Progress } from '@/components/ui/progress'
-import { useRouter } from 'next/navigation'
-import { cn } from '@/components/ui/utils'
-
-interface LessonHeaderProps {
-  className?: string
-  progress: number
-  isCompleted?: boolean
-}
-
-export function LessonHeader({ className, progress, isCompleted }: LessonHeaderProps) {
- const router = useRouter()
-
- return (
-   <header className={cn(
-     "bg-background/80 backdrop-blur-sm border-b",
-     "px-4 py-3",
-     className
-   )}>
-     <div className="flex items-center gap-4">
-       <Button 
-         variant="ghost" 
-         size="icon"
-         onClick={() => router.back()}
-         className="shrink-0"
-       >
-         <ArrowLeft className="h-5 w-5" />
-         <span className="sr-only">Go back</span>
-       </Button>
-
-       <div className="flex-1 min-w-0">
-         <Progress 
-           value={progress}
-           className="h-2" 
-         />
-       </div>
-
-       <div className="shrink-0 text-sm font-medium flex items-center gap-2">
-         {progress}%
-         {isCompleted && (
-           <CheckCircle className="h-4 w-4 text-green-500" />
-         )}
-       </div>
-     </div>
-   </header>
- )
-}
-
-================
-File: [lessonId]/components/loading-overlay.tsx
-================
-// app/lessons/[lessonId]/components/loading-overlay.tsx
-
-import { cn } from "@/components/ui/utils"
-
-export function LoadingOverlay() {
-    return (
-      <div className={cn(
-        "fixed inset-0 z-50",
-        "bg-background/80 backdrop-blur-sm",
-        "flex items-center justify-center"
-      )}>
-        <div className="space-y-4 text-center">
-          <div className="animate-spin">
-            {/* Loading spinner */}
-          </div>
-          <p className="text-sm text-muted-foreground">
-            Loading...
-          </p>
-        </div>
-      </div>
-    )
-  }
-
-================
-File: [lessonId]/components/slides/info-bullet-slide.tsx
-================
-// app/lessons/[lessonId]/components/slides/info-bullet-slide.tsx
-
-'use client'
-
-import { motion } from 'framer-motion'
-import { Button } from '@/components/ui/button'
-import { Card } from '@/components/ui/card'
-import { InfoBulletSlide as InfoBulletSlideType } from '../../../types/lesson.types'
-import { cn } from '@/components/ui/utils'
-import Image from 'next/image'
-import { ImageErrorBoundary } from '../image-error-boundary'
-
-interface InfoBulletSlideProps {
-  content: InfoBulletSlideType
-  isActive: boolean
-  isCompleted: boolean
-  onComplete: () => void
-}
-
-export function InfoBulletSlide({ 
-  content, 
-  isActive, 
-  isCompleted, 
-  onComplete 
-}: InfoBulletSlideProps) {
-  return (
-    <Card className={cn(
-      "overflow-hidden transition-all",
-      isActive && "ring-2 ring-primary"
-    )}>
-      <motion.div 
-        className="p-6"
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-      >
-        {content.imageUrl && (
-          <motion.div 
-            className="relative w-full h-[240px] mb-6"
-            initial={{ scale: 0.95 }}
-            animate={{ scale: 1 }}
-          >
-            <ImageErrorBoundary>
-              <Image
-                src={content.imageUrl}
-                alt={content.title}
-                fill
-                className="object-cover rounded-lg"
-                sizes="(max-width: 768px) 100vw, 768px"
-              />
-            </ImageErrorBoundary>
-          </motion.div>
-        )}
-
-        <motion.h2 
-          className="text-2xl font-bold mb-4"
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-        >
-          {content.title}
-        </motion.h2>
-
-        {content.introduction && (
-          <motion.p 
-            className="text-muted-foreground mb-4"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-          >
-            {content.introduction}
-          </motion.p>
-        )}
-
-        <motion.ul
-          className="space-y-3 mb-6"
-          initial="hidden"
-          animate="visible"
-          variants={{
-            visible: {
-              transition: { staggerChildren: 0.1 }
-            }
-          }}
-        >
-          {content.bullets.map((bullet, index) => (
-            <motion.li
-              key={index}
-              className="flex gap-3 text-muted-foreground"
-              variants={{
-                hidden: { opacity: 0, x: -20 },
-                visible: { opacity: 1, x: 0 }
-              }}
-            >
-              <span className="text-primary">•</span>
-              <span>{bullet.text}</span>
-            </motion.li>
-          ))}
-        </motion.ul>
-
-        {!isCompleted && (
-          <motion.div 
-            className="flex justify-end"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-          >
-            <Button onClick={onComplete}>Continue</Button>
-          </motion.div>
-        )}
-      </motion.div>
-    </Card>
-  )
-}
-
-================
-File: [lessonId]/components/slides/info-slide.tsx
-================
-// app/lessons/[lessonId]/components/slides/info-slide.tsx
-
-'use client'
-
-import { motion } from 'framer-motion'
-import { Button } from '@/components/ui/button'
-import { Card } from '@/components/ui/card'
-import { ImageErrorBoundary } from '../image-error-boundary'
-import { InfoSlide as InfoSlideType } from '../../../types/lesson.types'
-import { cn } from '@/components/ui/utils'
-import Image from 'next/image'
-
-
-interface InfoSlideProps {
-  content: InfoSlideType
-  isActive: boolean
-  isCompleted: boolean
-  onComplete: () => void
-}
-
-export function InfoSlide({ content, isActive, isCompleted, onComplete }: InfoSlideProps) {
-  return (
-    <Card className={cn(
-      "overflow-hidden transition-all",
-      isActive && "ring-2 ring-primary"
-    )}>
-      <motion.div 
-        className="p-6"
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-      >
-        {content.imageUrl && (
-          <motion.div 
-            className="relative w-full h-[240px] mb-6"
-            initial={{ scale: 0.95 }}
-            animate={{ scale: 1 }}
-          >
-            <ImageErrorBoundary>
-              <Image
-                src={content.imageUrl}
-                alt={content.title}
-                fill
-                className="object-cover rounded-lg"
-                sizes="(max-width: 768px) 100vw, 768px"
-              />
-            </ImageErrorBoundary>
-          </motion.div>
-        )}
-
-        <motion.h2 
-          className="text-2xl font-bold mb-4"
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-        >
-          {content.title}
-        </motion.h2>
-
-        <motion.p 
-          className="text-muted-foreground mb-6"
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-        >
-          {content.body}
-        </motion.p>
-
-        {!isCompleted && (
-          <motion.div 
-            className="flex justify-end"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-          >
-            <Button onClick={onComplete}>Continue</Button>
-          </motion.div>
-        )}
-      </motion.div>
-    </Card>
-  )
-}
-
-================
-File: [lessonId]/components/slides/question-slide.tsx
-================
-// app/lessons/[lessonId]/components/slides/question-slide.tsx
-
-'use client'
-
-import { useState } from 'react'
-import { motion, AnimatePresence } from 'framer-motion'
-import { Button } from '@/components/ui/button'
-import { Card } from '@/components/ui/card'
-import { QuestionSlide as QuestionSlideType } from '../../../types/lesson.types'
-import { cn } from '@/components/ui/utils'
-import Image from 'next/image'
-import { ImageErrorBoundary } from '../image-error-boundary'
-
-interface QuestionSlideProps {
-  content: QuestionSlideType
-  isActive: boolean
-  isCompleted: boolean
-  interactionState: string
-  onAnswer: (optionId: string, correctOptionId: string) => void
-  onComplete: () => void
-}
-
-export function QuestionSlide({ 
-  content, 
-  isActive, 
-  isCompleted, 
-  onAnswer,
-  onComplete 
-}: QuestionSlideProps) {
-  const [selectedId, setSelectedId] = useState<string | null>(null)
-
-  const correctOption = content.options.find(opt => opt.isCorrect)
-
-  return (
-    <Card className={cn(
-      "overflow-hidden transition-all",
-      isActive && "ring-2 ring-primary"
-    )}>
-      <motion.div 
-        className="p-6"
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-      >
-        {content.imageUrl && (
-          <motion.div 
-            className="relative w-full h-[240px] mb-6"
-            initial={{ scale: 0.95 }}
-            animate={{ scale: 1 }}
-          >
-            <ImageErrorBoundary>
-              <Image
-                src={content.imageUrl}
-                alt=""
-                fill
-                className="object-cover rounded-lg"
-                sizes="(max-width: 768px) 100vw, 768px"
-              />
-            </ImageErrorBoundary>
-          </motion.div>
-        )}
-
-        <motion.h2 
-          className="text-xl font-semibold mb-6"
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-        >
-          {content.question}
-        </motion.h2>
-
-        <div className="space-y-3 mb-6">
-          {content.options.map((option) => (
-            <motion.button
-              key={option.id}
-              onClick={() => !isCompleted && setSelectedId(option.id)}
-              className={cn(
-                "w-full p-4 rounded-lg border-2 text-left transition-colors",
-                selectedId === option.id && "border-primary bg-primary/5",
-                isCompleted && option.isCorrect && "border-green-500 bg-green-50",
-                isCompleted && !option.isCorrect && selectedId === option.id && "border-red-500 bg-red-50"
-              )}
-              initial={{ opacity: 0, x: -20 }}
-              animate={{ opacity: 1, x: 0 }}
-            >
-              {option.text}
-            </motion.button>
-          ))}
-        </div>
-
-        <AnimatePresence mode="wait">
-          {!isCompleted ? (
-            <motion.div
-              className="flex justify-end"
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-            >
-              <Button 
-                onClick={() => {
-                  if (selectedId && correctOption) {
-                    onAnswer(selectedId, correctOption.id)
-                  }
-                }}
-                disabled={!selectedId}
-              >
-                Check Answer
-              </Button>
-            </motion.div>
-          ) : (
-            <motion.div
-              className="space-y-4"
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-            >
-              {content.explanation && (
-                <div className="bg-muted p-4 rounded-lg">
-                  {content.explanation}
-                </div>
-              )}
-              <div className="flex justify-end">
-                <Button onClick={onComplete}>Continue</Button>
-              </div>
-            </motion.div>
-          )}
-        </AnimatePresence>
-      </motion.div>
-    </Card>
-  )
-}
-
-================
-File: [lessonId]/layout.tsx
-================
-// app/lessons/[lessonId]/layout.tsx
-
-'use client'
-
-import { LessonHeader } from './components/lesson-header'
-import { cn } from '@/components/ui/utils'
-
-interface LessonLayoutProps {
- children: React.ReactNode
-}
-
-export default function LessonLayout({ children }: LessonLayoutProps) {
- return (
-   <div className={cn(
-     "min-h-[100dvh] flex flex-col",
-     "bg-background"
-   )}>
-     <LessonHeader className="flex-none fixed top-0 left-0 right-0 z-50" progress={0} />
-     
-     <main className={cn(
-       "flex-1 relative",
-       "px-4 sm:px-6 lg:px-8",
-       "pt-safe-offset-top pb-safe-offset-bottom"
-     )}>
-       {children}
-     </main>
-   </div>
- )
-}
-
-================
-File: [lessonId]/page.tsx
-================
-// app/lessons/[lessonId]/page.tsx
-
-import { ErrorBoundary } from '@/components/error-boundary'
-import { LessonContainer } from './components/lesson-container'
-
-interface PageProps {
-  params: Promise<{
-    lessonId: string
-  }>
-}
-
-export default async function LessonPage({ params }: PageProps) {
-  const { lessonId } = await params
-
-  return (
-    <ErrorBoundary>
-      <LessonContainer lessonId={lessonId} />
-    </ErrorBoundary>
-  )
-}
-
-================
-File: actions/lesson-completion.ts
-================
-// features/lessons/actions/lesson-completion.ts
-'use server'
-
-import { lessonCompletionService } from '../services/lesson-completion.service'
-import type { LessonCompletion } from '../types/db.types'
-
-export async function createCompletion(lessonId: string, token: string | null): Promise<LessonCompletion | null> {
- try {
-   return await lessonCompletionService.createCompletion({ lesson_id: lessonId }, token)
- } catch (error) {
-   // Silently handle duplicate completions
-   if (error instanceof Error && error.message.includes('UNIQUE_VIOLATION')) {
-     return null
-   }
-   // Rethrow other errors
-   throw error
- }
-}
-
-================
-File: data/exercise-content.ts
-================
-// pacing-lesson.ts
-export const exerciseLessonContent = [
-    {
-      id: '1',
-      type: 'info',
-      title: 'What\'s the goal of these exercises?',
-      body: 'These exercises are not for strengthening-- they are diagnostic tools to guide your recovery.',
-      imageUrl: '/proneonelbows.png'
-    },
-    {
-      id: '2',
-      type: 'info',
-      title: 'Creating The Right Environment',
-      body: 'Stop any existing exercises you are currently doing for your low back.  This will help us more clearly determine which exercises are helping or hurting your condition.',
-      imageUrl: '/longterm.png'
-    },
-    {
-      id: '3',
-
-      type: 'infoBullet',
-      title: 'Understanding Your Exercise Response',
-      introduction: 'Several key responses to pay attention to with the exercises:',
-      bullets: [
-        { text: 'Your pain may appear then gradually diminish' },
-        { text: 'Your movement may improve with repetition' },
-        { text: 'Your symptoms can increase or decrease' },
-        { text: 'Your pain location may change or shift' }
-      ],
-      imageUrl: '/derangement.png'
-    },
-    {
-      id: '4',
-      type: 'infoBullet',
-      title: 'What is Centralization?',
-      introduction: 'Centralization is the movement of your pain to a more central location:',
-      bullets: [
-        { text: 'It is the best indicator of recovery' },
-        { text: 'Exercises that centralize are the correct movements' },
-        { text: 'Exercises that move pain away from the low back are the wrong movements' },
-        { text: 'Let the exercises that centralize your pain guide you' }
-      ],
-      imageUrl: '/centralize.png'
-    },
-
-    // {
-    //   id: '5',
-    //   type: 'question',
-    //   question: 'Is the pain centralizing?',
-    //   options: [
-    //     { id: '1', text: 'No, the symptoms are moving away from the low back.', isCorrect: true },
-    //     { id: '2', text: 'No, the symptoms are staying the same.', isCorrect: false },
-    //     { id: '3', text: 'Yes, the symptoms move from the back of the thigh to the low back.', isCorrect: false }
-    //   ],
-    //   explanation: 'Remember, centralization is the movement of your pain to a more central location. If your pain is moving away from the low back, it is worsening.',
-    //   imageUrl: '/beforeafter.png'
-    // },
-    // {
-    //   id: '6',
-    //   type: 'infoBullet',
-    //   title: 'What is Directional Preference?',
-    //   introduction: 'It\'s the movement direction that improves or centralizes your symptoms:',
-    //   bullets: [
-    //     { text: 'Most common direction is extension (backward bending)' },
-    //     { text: 'Up to 70% of people exhibit a directional preference' },
-    //     { text: 'Using repeated movements in the same direction can help determine the correct direction' },
-    //     { text: 'The exercise module ahead will help guide you to find your directional preference' }
-    //   ],
-    //   imageUrl: '/standflexext.png'
-      
-    // },
-    // {
-    //   id: '7',
-    //   type: 'question',
-    //   question: 'A person has pain in their lower back and right hip. After performing 10 repetitions of forward bends (flexion), their symptoms have spread to include their lower back, right hip, and right calf. Is flexion their directional preference?',
-    //   options: [
-    //     { id: '1', text: 'Yes, their symptoms are centralizing', isCorrect: false },
-    //     { id: '2', text: 'No, their symptoms are moving away from the low back.', isCorrect: true },
-    //     { id: '3', text: 'Not enough information to determine', isCorrect: false }
-    //   ],
-    //   explanation: 'The answer is no.  The patient symptoms have moved further down into the calf.  This is the opposite of centralization, and tells us that we do not want to continue in that direction.  Remember:  If symptoms move away from the spine, pain intensity increases and remains worse, and/or your range of movement decreases,  you should discontinue the movement in that direction.',
-    //   imageUrl: '/beforeaftercalf.png'
-    // },
-
-    // {
-    //   id: '8',
-    //   type: 'question',
-    //   question: 'The same person now has pain in their low back, right hip, and right calf. After performing 10 repetitions of backward bends (extension), their symptoms are now in the low back and the right hip. Is extension their directional preference?',
-    //   options: [
-    //     { id: '1', text: 'Yes, their symptoms are centralizing', isCorrect: true },
-    //     { id: '2', text: 'No, their symptoms are moving away from the low back.', isCorrect: false },
-    //     { id: '3', text: 'Not enough information to determine', isCorrect: false }
-    //   ],
-    //   explanation: 'The answer is yes!  The right calf no longer has any symptoms, and the pain is back to the original location of the low back and right hip.  This is a centralizing response.  They should continue with extension.',
-    //   imageUrl: '/afterbeforecalf.png'
-    // },
-    // {
-    //   id: '9',
-    //   type: 'info',
-    //   title: 'Last but not least...',
-    //   body: 'We understand that was a lot. Feel free to scroll up and review any of the principles we went over. The next module will help guide you through a series of exercises to help you find your directional preference.',
-    //   imageUrl: '/sphinx-pose.png',
-    //   nextRoute: '/exercise-progression/1'
-    // }
-  ]
-
-================
-File: data/posture-content.ts
-================
-// posture-lesson.ts
-export const postureLessonContent = [
-    {
-      id: '1',
-      type: 'info',
-      title: 'Understanding Posture',
-      body: 'Good posture is essential for reducing strain on your body and preventing pain. In this lesson, we\'ll explore what makes good posture and how to maintain it throughout your day.',
-      imageUrl: '/goodbadposture.png'
-    },
-    {
-      id: '2',
-      type: 'info',
-      title: 'The Spine\'s Natural Curves',
-      body: 'Your spine has natural curves that help distribute weight and absorb shock. Maintaining these curves while sitting and standing is key to good posture.',
-      imageUrl: '/lumbar-good.png'
-    },
-    {
-      id: '3',
-      type: 'question',
-      question: 'Which of these is a sign of poor posture?',
-      options: [
-        { id: '1', text: 'Rounded shoulders and forward head position', isCorrect: true },
-        { id: '2', text: 'Ears aligned with shoulders when viewed from the side', isCorrect: false },
-        { id: '3', text: 'Natural curve in lower back', isCorrect: false }
-      ],
-      explanation: 'Rounded shoulders and forward head position put extra strain on your neck and upper back muscles. This posture often develops from prolonged computer use or phone viewing.',
-      imageUrl: '/posture-good.png'
-    },
-    {
-      id: '4',
-      type: 'info',
-      title: 'Common Posture Mistakes',
-      body: 'Many daily activities can lead to poor posture. Looking down at phones, slouching at desks, and carrying heavy bags on one shoulder are common culprits.',
-      imageUrl: '/slouchposture.png'
-    },
-    {
-      id: '5',
-      type: 'question',
-      question: 'What is the best way to check your standing posture?',
-      options: [
-        { id: '1', text: 'Stand with your back against a wall, with head, shoulders, and hips touching', isCorrect: true },
-        { id: '2', text: 'Look in the mirror while standing normally', isCorrect: false },
-        { id: '3', text: 'Ask someone to take a photo of you', isCorrect: false }
-      ],
-      explanation: 'The wall check provides consistent reference points for alignment. Your head, shoulder blades, and buttocks should touch the wall, with feet about 4 inches from the wall.',
-      imageUrl: ''
-    }
-  ]
-
-================
-File: hooks/__tests__/use-lesson-completion.test.ts
-================
-// features/lessons/hooks/__tests__/use-lesson-completion.test.tsx
-
 import { renderHook, act } from '@testing-library/react'
-import { useAuth } from '@clerk/nextjs'
-import { useLessonCompletion } from '../use-lesson-completion'
-import { createCompletion } from '../../actions/lesson-completion'
+import { useDashboardState } from '../use-dashboard-state'
+import { DashboardService } from '../../services/dashboard.service'
 
-
-// Mock dependencies
 jest.mock('@clerk/nextjs', () => ({
-  useAuth: jest.fn()
+  useAuth: () => ({
+    getToken: jest.fn().mockResolvedValue('mock-token')
+  })
 }))
 
-jest.mock('../../actions/lesson-completion', () => ({
-  createCompletion: jest.fn()
-}))
+jest.mock('../../services/dashboard.service')
 
-describe('useLessonCompletion', () => {
-  const mockLessonId = 'lesson-1'
-  const mockToken = 'test-token'
-
+describe('useDashboardState', () => {
   beforeEach(() => {
     jest.clearAllMocks()
-    ;(useAuth as jest.Mock).mockReturnValue({
-      getToken: jest.fn().mockResolvedValue(mockToken)
-    })
   })
 
-  it('should initialize with default state', () => {
-    const { result } = renderHook(() => useLessonCompletion(mockLessonId))
-
-    expect(result.current.isCompleting).toBe(false)
+  it('should initialize with loading state', () => {
+    const { result } = renderHook(() => useDashboardState())
+    
+    expect(result.current.isLoading).toBe(true)
     expect(result.current.error).toBeNull()
   })
 
-  it('should successfully complete a lesson', async () => {
-    ;(createCompletion as jest.Mock).mockResolvedValue({
-      id: '123',
-      lesson_id: mockLessonId,
-      completed_at: new Date().toISOString()
+  it('should update state when initial exam data is loaded', async () => {
+    const mockExam = {
+      id: '1',
+      is_completed: true,
+      body_map_id: '123',
+      created_at: new Date().toISOString()
+    }
+
+    ;(DashboardService.prototype.getInitialExamStatus as jest.Mock).mockResolvedValue({
+      data: mockExam,
+      error: null
     })
 
-    const { result } = renderHook(() => useLessonCompletion(mockLessonId))
+    const { result, waitForNextUpdate } = renderHook(() => useDashboardState())
+    
+    await waitForNextUpdate()
 
-    await act(async () => {
-      await result.current.complete()
-    })
-
-    expect(createCompletion).toHaveBeenCalledWith(mockLessonId, mockToken)
-    expect(result.current.isCompleting).toBe(false)
-    expect(result.current.error).toBeNull()
+    expect(result.current.state.initialExam.isCompleted).toBe(true)
+    expect(result.current.canAccessLessons).toBe(true)
   })
 
-  it('should handle completion failure', async () => {
-    const error = new Error('Failed to complete')
-    ;(createCompletion as jest.Mock).mockRejectedValue(error)
-
-    const { result } = renderHook(() => useLessonCompletion(mockLessonId))
-
-    await act(async () => {
-      try {
-        await result.current.complete()
-      } catch (e) {
-        expect(e).toBe(error)
-      }
-    })
-
-    expect(result.current.isCompleting).toBe(false)
-    expect(result.current.error).toBe(error)
-  })
-
-  it('should handle auth token failure', async () => {
-    const error = new Error('Auth error')
-    ;(useAuth as jest.Mock).mockReturnValue({
-      getToken: jest.fn().mockRejectedValue(error)
-    })
-
-    const { result } = renderHook(() => useLessonCompletion(mockLessonId))
-
-    await act(async () => {
-      try {
-        await result.current.complete()
-      } catch (e) {
-        expect(e).toBe(error)
-      }
-    })
-
-    expect(result.current.isCompleting).toBe(false)
-    expect(result.current.error).toBe(error)
-  })
+  // Add more tests...
 })
 
 ================
-File: hooks/use-lesson-completion.ts
+File: hooks/use-dashboard-state.ts
 ================
-// /features/lessons/hooks/use-lesson-completion.ts
-import { useState, useCallback } from 'react'
+import { useState, useEffect } from 'react'
 import { useAuth } from '@clerk/nextjs'
-import { createCompletion } from '../actions/lesson-completion'
-import type { LessonCompletion } from '../types/db.types'
+import { DashboardStateModel } from '../model/dashboard-state'
+import { DashboardService } from '../services/dashboard.service'
 
-export function useLessonCompletion(lessonId: string) {
+export function useDashboardState() {
   const { getToken } = useAuth()
-  const [isCompleting, setIsCompleting] = useState(false)
+  const [dashboardModel] = useState(() => new DashboardStateModel())
+  const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<Error | null>(null)
 
-  const complete = useCallback(async () => {
-    try {
-      setIsCompleting(true)
-      setError(null)
-      const token = await getToken({ template: 'supabase' })
-      await createCompletion(lessonId, token)
-    } catch (err) {
-      setError(err instanceof Error ? err : new Error('Failed to complete lesson'))
-      throw err
-    } finally {
-      setIsCompleting(false)
+  useEffect(() => {
+    async function loadDashboardState() {
+      try {
+        setIsLoading(true)
+        const token = await getToken({ template: 'supabase' })
+        const service = new DashboardService(token)
+
+        const [examResponse, completionsResponse] = await Promise.all([
+          service.getInitialExamStatus(),
+          service.getLessonCompletions()
+        ])
+
+        if (examResponse.data) {
+          dashboardModel.updateInitialExam({
+            id: examResponse.data.id,
+            isCompleted: examResponse.data.is_completed,
+            bodyMapId: examResponse.data.body_map_id,
+            createdAt: examResponse.data.created_at
+          })
+        }
+
+        if (completionsResponse.data) {
+          completionsResponse.data.forEach(completion => {
+            dashboardModel.updateLessonCompletion(completion.lesson_id, {
+              id: completion.id,
+              isCompleted: true,
+              completedAt: completion.completed_at
+            })
+          })
+        }
+      } catch (err) {
+        setError(err instanceof Error ? err : new Error('Failed to load dashboard'))
+      } finally {
+        setIsLoading(false)
+      }
     }
-  }, [lessonId, getToken])
+
+    loadDashboardState()
+  }, [getToken])
 
   return {
-    complete,
-    isCompleting,
+    state: dashboardModel.getState(),
+    canAccessLessons: dashboardModel.canAccessLessons(),
+    canAccessExercises: dashboardModel.canAccessExercises(),
+    isLoading,
     error
   }
 }
 
 ================
-File: hooks/use-lesson-progress.ts
+File: hooks/use-progress-tracking.ts
 ================
-// features/lessons/hooks/use-lesson-progress.ts
-
-import { useState, useCallback, useEffect } from 'react'
+import { useState, useEffect } from 'react'
 import { useAuth } from '@clerk/nextjs'
-import { LessonProgress } from '../model/lesson-progress'
-import type { Lesson, Slide } from '../types/lesson.types'
-import { exerciseLessonContent } from '../data/exercise-content'
-import { postureLessonContent } from '../data/posture-content'
+import { ProgressTrackingModel } from '../model/progress-tracking'
+import { ProgressService } from '../services/progress.service'
 
-export function useLessonProgress(lessonId?: string) {
-  const { userId } = useAuth()
-  const [lesson, setLesson] = useState<Lesson | null>(null)
-  const [progressModel] = useState(() => new LessonProgress())
-  const [loading, setLoading] = useState(false)
+export function useProgressTracking() {
+  const { getToken } = useAuth()
+  const [progressModel] = useState(() => new ProgressTrackingModel())
+  const [isLoading, setIsLoading] = useState(true)
+  const [error, setError] = useState<Error | null>(null)
 
-  // Load static lesson content based on lessonId
   useEffect(() => {
-    async function loadLesson() {
+    async function loadProgressData() {
       try {
-        setLoading(true)
+        setIsLoading(true)
+        const token = await getToken({ template: 'supabase' })
+        const service = new ProgressService(token)
         
-        // Use static content based on lessonId
-        const slides = lessonId === 'exercise-lesson' 
-          ? exerciseLessonContent 
-          : lessonId === 'posture-lesson'
-            ? postureLessonContent
-            : []
+        const activityResponse = await service.getActivityDates({
+          from: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString()
+        })
 
-        if (slides.length > 0) {
-          const lessonData: Lesson = {
-            id: lessonId || 'default',
-            title: lessonId === 'exercise-lesson' ? 'Exercise Lesson' : 'Posture Lesson',
-            slides: slides as Slide[],
-            progress: 0,
-            currentSlideIndex: 0,
-            completedSlideIds: [],
-            createdAt: new Date().toISOString(),
-            updatedAt: new Date().toISOString(),
-            userId: userId || 'anonymous'
-          }
-          setLesson(lessonData)
+        if (activityResponse.data) {
+          activityResponse.data.forEach(date => {
+            progressModel.addActivity({
+              date,
+              type: 'exercise',
+              id: date
+            })
+          })
         }
-      } catch (error) {
-        console.error('Error loading lesson:', error)
+      } catch (err) {
+        setError(err instanceof Error ? err : new Error('Failed to load progress'))
       } finally {
-        setLoading(false)
+        setIsLoading(false)
       }
     }
 
-    loadLesson()
-  }, [lessonId, userId])
-
-  const completeSlide = useCallback(async (slideId: string) => {
-    if (!lesson) return
-
-    try {
-      setLoading(true)
-      progressModel.completeSlide(slideId, lesson.slides.length)
-      
-      // Update local lesson state
-      setLesson(prev => {
-        if (!prev) return null
-        const newCompletedSlideIds = [...prev.completedSlideIds, slideId]
-        return {
-          ...prev,
-          completedSlideIds: newCompletedSlideIds,
-          progress: progressModel.getProgress(),
-          isCompleted: newCompletedSlideIds.length === lesson.slides.length
-        }
-      })
-    } finally {
-      setLoading(false)
-    }
-  }, [lesson, progressModel])
+    loadProgressData()
+  }, [getToken])
 
   return {
-    lesson,
-    progress: progressModel.getProgress(),
-    completedSlides: new Set(lesson?.completedSlideIds || []),
-    currentIndex: progressModel.getCurrentIndex(),
-    loading,
-    completeSlide,
-    isCompleted: lesson?.completedSlideIds.length === lesson?.slides.length
+    streakData: progressModel.getStreakData(),
+    activityLog: progressModel.getActivityLog(),
+    isLoading,
+    error
   }
 }
 
 ================
-File: hooks/use-lesson.ts
+File: hooks/use-user-activity.ts
 ================
-// features/lessons/hooks/use-lesson.ts
+import { useState, useEffect } from 'react'
+import { useAuth } from '@clerk/nextjs'
+import { UserActivityModel } from '../model/user-activity'
+import { ActivityService } from '../services/activity.service'
 
-import { useLessonProgress } from './use-lesson-progress'
-import { useSlideInteraction } from './use-slide-interaction'
-import { useViewportScroll } from './use-viewport-scroll'
-import { useMemo } from 'react'
-
-export function useLesson(lessonId?: string) {
-  const {
-    lesson,
-    progress,
-    completedSlides,
-    currentIndex,
-    loading,
-    completeSlide
-  } = useLessonProgress(lessonId)
-
-  const {
-    state: interactionState,
-    selectedOption,
-    isCorrect,
-    hasReviewed,
-    canSubmit,
-    canViewExplanation,
-    handleAnswer,
-    showExplanationPanel,
-    reset: resetInteraction
-  } = useSlideInteraction()
-
-  const {
-    updateSlidePosition,
-    scrollToSlide,
-    activeSlideId,
-    lastScrollPosition
-  } = useViewportScroll()
-
-  // Calculate visible slides based on lesson data and current index
-  const visibleSlides = useMemo(() => {
-    if (!lesson?.slides) return []
-    // Only show current slide
-    return lesson.slides.slice(0, currentIndex + 1)
-  }, [lesson?.slides, currentIndex])
-
-  return {
-    // Lesson Progress
-    lesson,
-    visibleSlides,
-    progress,
-    completedSlides,
-    currentIndex,
-    loading,
-    completeSlide,
-
-    // Interaction State  
-    interactionState,
-    selectedOption,
-    isCorrect,
-    hasReviewed,
-    canSubmit,
-    canViewExplanation,
-    handleAnswer,
-    showExplanationPanel,
-    resetInteraction,
-
-    // Viewport/Scroll
-    updateSlidePosition,
-    scrollToSlide,
-    activeSlideId,
-    lastScrollPosition
-  }
-}
-
-================
-File: hooks/use-slide-interaction.ts
-================
-// features/lessons/hooks/use-slide-interaction.ts
-
-import { useState, useCallback } from 'react'
-import { SlideInteraction } from '../model/slide-interaction'
-
-export function useSlideInteraction() {
-  const [interactionModel] = useState(() => new SlideInteraction())
-
-  const handleAnswer = useCallback((optionId: string, correctOptionId: string) => {
-    interactionModel.selectOption(optionId)
-    interactionModel.submit(correctOptionId)
-  }, [interactionModel])
-
-  const showExplanationPanel = useCallback(() => {
-    interactionModel.viewExplanation()
-  }, [interactionModel])
-
-  const reset = useCallback(() => {
-    interactionModel.reset()
-  }, [interactionModel])
-
-  return {
-    state: interactionModel.getState(),
-    selectedOption: interactionModel.getSelectedOption(),
-    isCorrect: interactionModel.isAnswerCorrect(),
-    hasReviewed: interactionModel.hasReviewed(),
-    canSubmit: interactionModel.canSubmit(),
-    canViewExplanation: interactionModel.canViewExplanation(),
-    handleAnswer,
-    showExplanationPanel,
-    reset
-  }
-}
-
-================
-File: hooks/use-viewport-scroll.ts
-================
-import { useState, useEffect, useCallback, useRef } from 'react';
-
-interface ViewportBounds {
-  top: number;
-  bottom: number;
-}
-
-interface SlidePosition {
-  slideId: string;
-  bounds: ViewportBounds;
-  isActive: boolean;
-}
-
-const HEADER_HEIGHT = 72; // Adjust this value based on the actual height of your fixed header
-
-export function useViewportScroll() {
-  const [slidePositions, setSlidePositions] = useState<Map<string, SlidePosition>>(new Map());
-  const [activeSlideId, setActiveSlideId] = useState<string | null>(null);
-  const [lastScrollPosition, setLastScrollPosition] = useState<number>(0);
-  const lastScrollPositionRef = useRef<number>(0);
-
-  const updateSlidePosition = useCallback((slideId: string, bounds: ViewportBounds) => {
-    setSlidePositions(prev => {
-      const newPositions = new Map(prev);
-      newPositions.set(slideId, { slideId, bounds, isActive: false });
-      return newPositions;
-    });
-  }, []);
-
-  const scrollToSlide = useCallback((index: number) => {
-    const slides = document.querySelectorAll('.slide-item');
-    const targetSlide = slides[index];
-    
-    if (!targetSlide) return;
-
-    const slideRect = targetSlide.getBoundingClientRect();
-    const scrollPosition = slideRect.top + window.scrollY - HEADER_HEIGHT; // Adjusted for header height
-
-    lastScrollPositionRef.current = scrollPosition;
-    setLastScrollPosition(scrollPosition);
-
-    window.scrollTo({
-      top: Math.max(0, scrollPosition),
-      behavior: 'smooth'
-    });
-
-    const verifyScroll = () => {
-      const currentPosition = window.scrollY;
-      if (Math.abs(currentPosition - lastScrollPositionRef.current) > 2) {
-        window.scrollTo(0, lastScrollPositionRef.current);
-      }
-    };
-
-    setTimeout(verifyScroll, 1000);
-  }, []);
+export function useUserActivity() {
+  const { getToken } = useAuth()
+  const [activityModel] = useState(() => new UserActivityModel())
+  const [isLoading, setIsLoading] = useState(true)
+  const [error, setError] = useState<Error | null>(null)
 
   useEffect(() => {
-    const handleScroll = () => {
-      const scrollPosition = window.scrollY;
-      setLastScrollPosition(scrollPosition);
+    async function loadActivityData() {
+      try {
+        setIsLoading(true)
+        const token = await getToken({ template: 'supabase' })
+        const service = new ActivityService(token)
 
-      slidePositions.forEach((position, slideId) => {
-        const isVisible =
-          position.bounds.bottom >= scrollPosition &&
-          position.bounds.top <= scrollPosition + window.innerHeight;
+        const [recentActivityResponse, streakResponse] = await Promise.all([
+          service.getRecentActivity({ limit: 10 }),
+          service.getCurrentStreak()
+        ])
 
-        if (isVisible && activeSlideId !== slideId) {
-          setActiveSlideId(slideId);
+        if (recentActivityResponse.data?.[0]) {
+          activityModel.recordExercise(
+            recentActivityResponse.data[0].completed_at
+          )
         }
-      });
-    };
 
-    window.addEventListener('scroll', handleScroll);
-    return () => window.removeEventListener('scroll', handleScroll);
-  }, [slidePositions, activeSlideId]);
+        if (streakResponse.data) {
+          // Update streak in model if needed
+          const currentStreak = streakResponse.data
+          for (let i = 0; i < currentStreak; i++) {
+            const date = new Date()
+            date.setDate(date.getDate() - i)
+            activityModel.recordExercise(date.toISOString())
+          }
+        }
+
+      } catch (err) {
+        setError(err instanceof Error ? err : new Error('Failed to load activity'))
+      } finally {
+        setIsLoading(false)
+      }
+    }
+
+    loadActivityData()
+  }, [getToken, activityModel])
 
   return {
-    updateSlidePosition,
-    scrollToSlide,
-    activeSlideId,
-    lastScrollPosition,
-  };
+    exerciseStreak: activityModel.getExerciseStreak(),
+    totalExercises: activityModel.getTotalExercises(),
+    completedLessons: activityModel.getCompletedLessons(),
+    needsAssessment: activityModel.needsAssessment(),
+    isLoading,
+    error
+  }
 }
 
 ================
-File: model/__tests__/lesson-progress.test.ts
+File: index.tsx
 ================
-// features/lessons/model/__tests__/lesson-progress.test.ts
+export { DashboardLayout } from './components/dashboard-layout'
+export { useDashboardState } from './hooks/use-dashboard-state'
+export { useProgressTracking } from './hooks/use-progress-tracking'
+export { useUserActivity } from './hooks/use-user-activity'
 
-import { LessonProgress } from '../lesson-progress'
+================
+File: layout.tsx
+================
+interface DashboardLayoutProps {
+    children: React.ReactNode
+  }
+  
+  export default function DashboardLayout({
+    children,
+  }: DashboardLayoutProps) {
+    return (
+      <div className="min-h-screen bg-gray-50">
+        {children}
+      </div>
+    )
+  }
 
-describe('LessonProgress', () => {
-  let progress: LessonProgress
+================
+File: model/dashboard-state.ts
+================
+import type { DashboardState, InitialExamState, LessonState, ExerciseState } from '../types/dashboard.types'
+
+export class DashboardStateModel {
+  private state: DashboardState
+
+  constructor(initial?: Partial<DashboardState>) {
+    this.state = {
+      initialExam: {
+        id: initial?.initialExam?.id ?? null,
+        isCompleted: initial?.initialExam?.isCompleted ?? false,
+        bodyMapId: initial?.initialExam?.bodyMapId ?? null,
+        createdAt: initial?.initialExam?.createdAt ?? null
+      },
+      lessonCompletions: initial?.lessonCompletions ?? {},
+      exerciseState: {
+        lastCompletedAt: initial?.exerciseState?.lastCompletedAt ?? null,
+        currentStreak: initial?.exerciseState?.currentStreak ?? 0,
+        totalSessions: initial?.exerciseState?.totalSessions ?? 0
+      },
+      romAssessmentLastCompletedAt: initial?.romAssessmentLastCompletedAt ?? null
+    }
+  }
+
+  updateInitialExam(exam: InitialExamState): void {
+    this.state.initialExam = exam
+  }
+
+  updateLessonCompletion(lessonId: string, completion: LessonState): void {
+    this.state.lessonCompletions[lessonId] = completion
+  }
+
+  updateExerciseState(exercise: ExerciseState): void {
+    this.state.exerciseState = exercise
+  }
+
+  updateROMAssessment(completedAt: string): void {
+    this.state.romAssessmentLastCompletedAt = completedAt
+  }
+
+  canAccessLessons(): boolean {
+    return this.state.initialExam.isCompleted
+  }
+
+  canAccessExercises(): boolean {
+    return this.state.initialExam.isCompleted && 
+           this.isLessonCompleted('exercise-lesson')
+  }
+
+  isLessonCompleted(lessonId: string): boolean {
+    return !!this.state.lessonCompletions[lessonId]?.isCompleted
+  }
+
+  hasRecentROMAssessment(): boolean {
+    if (!this.state.romAssessmentLastCompletedAt) return false
+    
+    const threeDaysAgo = new Date()
+    threeDaysAgo.setDate(threeDaysAgo.getDate() - 3)
+    
+    return new Date(this.state.romAssessmentLastCompletedAt) > threeDaysAgo
+  }
+
+  getState(): DashboardState {
+    return { ...this.state }
+  }
+}
+
+================
+File: model/progress-tracking.ts
+================
+import type { ProgressState, ActivityLog, StreakData } from '../types/progress.types'
+
+export class ProgressTrackingModel {
+  private state: ProgressState
+
+  constructor(initial?: Partial<ProgressState>) {
+    this.state = {
+      streakData: {
+        dates: initial?.streakData?.dates ?? [],
+        currentStreak: initial?.streakData?.currentStreak ?? 0,
+        bestStreak: initial?.streakData?.bestStreak ?? 0
+      },
+      activityLog: initial?.activityLog ?? [],
+      lastActive: initial?.lastActive ?? null
+    }
+  }
+
+  addActivity(activity: ActivityLog): void {
+    this.state.activityLog.push(activity)
+    this.state.lastActive = activity.date
+    this.updateStreakData(activity.date)
+  }
+
+  private updateStreakData(activityDate: string): void {
+    const dates = new Set(this.state.streakData.dates)
+    dates.add(activityDate)
+    
+    this.state.streakData.dates = Array.from(dates).sort()
+    this.calculateCurrentStreak()
+  }
+
+  private calculateCurrentStreak(): void {
+    if (!this.state.streakData.dates.length) {
+      this.state.streakData.currentStreak = 0
+      return
+    }
+
+    // const today = new Date().toISOString().split('T')[0]
+    const yesterday = new Date(Date.now() - 86400000)
+      .toISOString().split('T')[0]
+
+    const sortedDates = [...this.state.streakData.dates].sort()
+    const lastActivityDate = sortedDates[sortedDates.length - 1]
+
+    if (lastActivityDate < yesterday) {
+      this.state.streakData.currentStreak = 0
+      return
+    }
+
+    let streak = 1
+    for (let i = sortedDates.length - 2; i >= 0; i--) {
+      const currentDate = new Date(sortedDates[i])
+      const nextDate = new Date(sortedDates[i + 1])
+      
+      const diffDays = Math.floor(
+        (nextDate.getTime() - currentDate.getTime()) / (1000 * 60 * 60 * 24)
+      )
+      
+      if (diffDays === 1) {
+        streak++
+      } else {
+        break
+      }
+    }
+
+    this.state.streakData.currentStreak = streak
+    this.state.streakData.bestStreak = Math.max(
+      this.state.streakData.bestStreak,
+      streak
+    )
+  }
+
+  getStreakData(): StreakData {
+    return { ...this.state.streakData }
+  }
+
+  getActivityLog(): ActivityLog[] {
+    return [...this.state.activityLog]
+  }
+}
+
+================
+File: model/user-activity.ts
+================
+interface ActivityState {
+    lastExerciseDate: string | null
+    lastAssessmentDate: string | null
+    exerciseStreak: number
+    totalExercises: number
+    completedLessons: Set<string>
+  }
+  
+  export class UserActivityModel {
+    private state: ActivityState
+  
+    constructor(initial?: Partial<ActivityState>) {
+      this.state = {
+        lastExerciseDate: initial?.lastExerciseDate ?? null,
+        lastAssessmentDate: initial?.lastAssessmentDate ?? null,
+        exerciseStreak: initial?.exerciseStreak ?? 0,
+        totalExercises: initial?.totalExercises ?? 0,
+        completedLessons: new Set(initial?.completedLessons)
+      }
+    }
+  
+    recordExercise(date: string): void {
+      this.state.lastExerciseDate = date
+      this.state.totalExercises++
+      this.updateExerciseStreak(date)
+    }
+  
+    recordAssessment(date: string): void {
+      this.state.lastAssessmentDate = date
+    }
+  
+    completeLesson(lessonId: string): void {
+      this.state.completedLessons.add(lessonId)
+    }
+  
+    private updateExerciseStreak(date: string): void {
+      const today = new Date().toISOString().split('T')[0]
+      const yesterday = new Date(Date.now() - 86400000)
+        .toISOString().split('T')[0]
+  
+      if (!this.state.lastExerciseDate || 
+          this.state.lastExerciseDate < yesterday) {
+        this.state.exerciseStreak = 1
+      } else if (date === today && 
+                 this.state.lastExerciseDate === yesterday) {
+        this.state.exerciseStreak++
+      }
+    }
+  
+    needsAssessment(): boolean {
+      if (!this.state.lastAssessmentDate) return true
+  
+      const threeDaysAgo = new Date()
+      threeDaysAgo.setDate(threeDaysAgo.getDate() - 3)
+      
+      return new Date(this.state.lastAssessmentDate) < threeDaysAgo
+    }
+  
+    getExerciseStreak(): number {
+      return this.state.exerciseStreak
+    }
+  
+    getTotalExercises(): number {
+      return this.state.totalExercises
+    }
+  
+    getCompletedLessons(): string[] {
+      return Array.from(this.state.completedLessons)
+    }
+  }
+
+================
+File: page.tsx
+================
+import { DashboardLayout } from './components/dashboard-layout'
+import { ErrorBoundary } from '@/components/error-boundary'
+import { Suspense } from 'react'
+
+export default function DashboardPage() {
+  return (
+    <ErrorBoundary>
+      <Suspense fallback={<div>Loading dashboard...</div>}>
+        <DashboardLayout />
+      </Suspense>
+    </ErrorBoundary>
+  )
+}
+
+// Metadata
+export const metadata = {
+  title: 'Dashboard',
+  description: 'Your personal exercise and progress dashboard',
+}
+
+================
+File: services/__tests__/dashboard.service.test.ts
+================
+import { DashboardService } from '../dashboard.service'
+
+describe('DashboardService', () => {
+  let service: DashboardService
+  let mockClient: any
 
   beforeEach(() => {
-    // Fresh instance before each test
-    progress = new LessonProgress()
+    mockClient = {
+      from: jest.fn().mockReturnThis(),
+      select: jest.fn().mockReturnThis(),
+      maybeSingle: jest.fn(),
+      order: jest.fn().mockReturnThis(),
+      gte: jest.fn().mockReturnThis()
+    }
+    service = new DashboardService(mockClient)
   })
 
-  describe('Lesson State', () => {
-    test('should initialize with correct starting values', () => {
-      expect(progress.getCurrentIndex()).toBe(0)
-      expect(progress.getProgress()).toBe(0)
-      expect(progress.isLessonComplete()).toBe(false)
-      expect(progress.getCompletedSlides()).toHaveLength(0)
+  describe('getInitialExamStatus', () => {
+    it('should return initial exam data when exists', async () => {
+      const mockExam = {
+        id: '1',
+        is_completed: true
+      }
+      mockClient.maybeSingle.mockResolvedValue({ data: mockExam })
+
+      const result = await service.getInitialExamStatus()
+      expect(result.data).toEqual(mockExam)
+      expect(result.error).toBeNull()
     })
 
-    test('should track completed status correctly', () => {
-      // Complete all slides in a 2-slide lesson
-      progress.completeSlide('slide1', 2)
-      progress.completeSlide('slide2', 2)
-      
-      expect(progress.isLessonComplete()).toBe(true)
-      expect(progress.getProgress()).toBe(100)
-    })
-  })
+    it('should handle errors properly', async () => {
+      const mockError = new Error('Database error')
+      mockClient.maybeSingle.mockRejectedValue(mockError)
 
-  describe('Slide Completion', () => {
-    test('should only count each slide once', () => {
-      progress.completeSlide('slide1', 4)
-      progress.completeSlide('slide1', 4)
-      
-      expect(progress.getProgress()).toBe(25) // Only counted once
-    })
-
-    test('should calculate progress correctly', () => {
-      progress.completeSlide('slide1', 4)
-      expect(progress.getProgress()).toBe(25)
-      
-      progress.completeSlide('slide2', 4)
-      expect(progress.getProgress()).toBe(50)
+      const result = await service.getInitialExamStatus()
+      expect(result.data).toBeNull()
+      expect(result.error).toEqual(mockError)
     })
   })
 
-  describe('Navigation', () => {
-    test('should not advance beyond total slides', () => {
-      expect(progress.canAdvance(1)).toBe(false)
-    })
-
-    test('should advance when possible', () => {
-      expect(progress.canAdvance(2)).toBe(true)
-      progress.advanceSlide(2)
-      expect(progress.getCurrentIndex()).toBe(1)
-    })
-
-    test('should track current position correctly', () => {
-      progress.advanceSlide(3)
-      expect(progress.getCurrentIndex()).toBe(1)
-      
-      progress.advanceSlide(3)
-      expect(progress.getCurrentIndex()).toBe(2)
-    })
-  })
+  // Add more test cases...
 })
 
 ================
-File: model/__tests__/slide-interaction.test.ts
+File: services/activity.service.ts
 ================
-// features/lessons/model/__tests__/slide-interaction.test.ts
+import { SupabaseClient } from '@supabase/supabase-js'
+import { ExerciseRecord } from '../types/api.types'
+import { BaseResponse, QueryOptions } from '../types/service.types'
 
-import { SlideInteraction } from '../slide-interaction'
+export class ActivityService {
+  constructor(private readonly client: SupabaseClient) {}
 
-describe('SlideInteraction', () => {
-  let interaction: SlideInteraction
+  async getRecentActivity(options?: QueryOptions): Promise<BaseResponse<ExerciseRecord[]>> {
+    try {
+      let query = this.client
+        .from('exercise_series')
+        .select('*')
+        .order('completed_at', { ascending: false })
 
-  beforeEach(() => {
-    interaction = new SlideInteraction()
-  })
+      if (options?.limit) {
+        query = query.limit(options.limit)
+      }
 
-  describe('State Management', () => {
-    test('should initialize in viewing state', () => {
-      expect(interaction.getState()).toBe('viewing')
-      expect(interaction.getSelectedOption()).toBeNull()
-      expect(interaction.isAnswerCorrect()).toBeNull()
-    })
+      const { data, error } = await query
 
-    test('should transition through states correctly', () => {
-      interaction.startAnswering()
-      expect(interaction.getState()).toBe('answering')
+      if (error) throw error
 
-      interaction.selectOption('option1')
-      interaction.submit('option1')
-      expect(interaction.getState()).toBe('reviewing')
-    })
-  })
+      return { data, error: null }
+    } catch (error) {
+      return { 
+        data: null, 
+        error: error instanceof Error ? error : new Error('Unknown error') 
+      }
+    }
+  }
 
-  describe('Answer Handling', () => {
-    test('should handle correct answer', () => {
-      interaction.startAnswering()
-      interaction.selectOption('correct')
-      interaction.submit('correct')
+  async getCurrentStreak(): Promise<BaseResponse<number>> {
+    try {
+      const { data: dates, error } = await this.client
+        .from('exercise_series')
+        .select('completed_at')
+        .eq('status', 'completed')
+        .order('completed_at', { ascending: false })
+
+      if (error) throw error
+
+      // Calculate streak logic
+      const streak = this.calculateStreak(dates.map(d => d.completed_at))
+
+      return { data: streak, error: null }
+    } catch (error) {
+      return { 
+        data: null, 
+        error: error instanceof Error ? error : new Error('Unknown error') 
+      }
+    }
+  }
+
+  private calculateStreak(dates: string[]): number {
+    if (!dates.length) return 0
+
+    // const today = new Date().toISOString().split('T')[0]
+    const yesterday = new Date(Date.now() - 86400000)
+      .toISOString().split('T')[0]
+
+    const lastActivity = dates[0].split('T')[0]
+    if (lastActivity < yesterday) return 0
+
+    let streak = 1
+    for (let i = 1; i < dates.length; i++) {
+      const currentDate = new Date(dates[i])
+      const prevDate = new Date(dates[i - 1])
       
-      expect(interaction.isAnswerCorrect()).toBe(true)
-    })
-
-    test('should handle incorrect answer', () => {
-      interaction.startAnswering()
-      interaction.selectOption('wrong')
-      interaction.submit('correct')
+      const diffDays = Math.floor(
+        (prevDate.getTime() - currentDate.getTime()) / (1000 * 60 * 60 * 24)
+      )
       
-      expect(interaction.isAnswerCorrect()).toBe(false)
-    })
-  })
+      if (diffDays === 1) streak++
+      else break
+    }
 
-  describe('Explanation Viewing', () => {
-    test('should track explanation state', () => {
-      expect(interaction.hasReviewed()).toBe(false)
-      
-      interaction.viewExplanation()
-      expect(interaction.hasReviewed()).toBe(true)
-      expect(interaction.getState()).toBe('explaining')
-    })
-  })
-
-  describe('Reset Functionality', () => {
-    test('should reset to initial answering state', () => {
-      interaction.selectOption('option1')
-      interaction.submit('correct')
-      interaction.reset()
-
-      expect(interaction.getState()).toBe('answering')
-      expect(interaction.getSelectedOption()).toBeNull()
-      expect(interaction.isAnswerCorrect()).toBeNull()
-    })
-  })
-})
+    return streak
+  }
+}
 
 ================
-File: model/__tests__/viewport-state.test.ts
+File: services/dashboard.service.ts
 ================
-// features/lessons/model/__tests__/viewport-state.test.ts
+import { SupabaseClient } from '@supabase/supabase-js'
+import { 
+  InitialExamRecord, 
+  LessonCompletionRecord 
+} from '../types/api.types'
+import { BaseResponse } from '../types/service.types'
 
-import { ViewportState } from '../viewport-state'
+export class DashboardService {
+  constructor(private readonly client: SupabaseClient) {}
 
-describe('ViewportState', () => {
-  let viewport: ViewportState
+  async getInitialExamStatus(): Promise<BaseResponse<InitialExamRecord>> {
+    try {
+      const { data, error } = await this.client
+        .from('initial_exams')
+        .select('*')
+        .maybeSingle()
 
-  beforeEach(() => {
-    viewport = new ViewportState()
-  })
+      if (error) throw error
 
-  describe('Slide Position Tracking', () => {
-    test('should track slide positions', () => {
-      viewport.updateSlidePosition('slide1', { top: 0, bottom: 100 })
-      expect(viewport.getSlideBounds('slide1')).toEqual({ top: 0, bottom: 100 })
-    })
+      return { data, error: null }
+    } catch (error) {
+      return { 
+        data: null, 
+        error: error instanceof Error ? error : new Error('Unknown error') 
+      }
+    }
+  }
 
-    test('should determine if slide is visible', () => {
-      viewport.updateSlidePosition('slide1', { top: 50, bottom: 150 })
-      
-      expect(viewport.isSlideVisible('slide1', { top: 0, bottom: 100 })).toBe(true)
-      expect(viewport.isSlideVisible('slide1', { top: 200, bottom: 300 })).toBe(false)
-    })
-  })
+  async getLessonCompletions(): Promise<BaseResponse<LessonCompletionRecord[]>> {
+    try {
+      const { data, error } = await this.client
+        .from('lesson_completions')
+        .select('*')
+        .order('completed_at', { ascending: false })
 
-  describe('Active Slide Management', () => {
-    test('should track active slide', () => {
-      viewport.setActiveSlide('slide1')
-      expect(viewport.getActiveSlideId()).toBe('slide1')
-    })
-  })
+      if (error) throw error
 
-  describe('Scroll Position', () => {
-    test('should record and retrieve scroll position', () => {
-      viewport.recordScrollPosition(100)
-      expect(viewport.getLastScrollPosition()).toBe(100)
-    })
-  })
-})
+      return { data, error: null }
+    } catch (error) {
+      return { 
+        data: null, 
+        error: error instanceof Error ? error : new Error('Unknown error') 
+      }
+    }
+  }
+
+  async hasRecentROMAssessment(): Promise<BaseResponse<boolean>> {
+    try {
+      const threeDaysAgo = new Date()
+      threeDaysAgo.setDate(threeDaysAgo.getDate() - 3)
+
+      const { count, error } = await this.client
+        .from('rom_assessments')
+        .select('*', { count: 'exact', head: true })
+        .gte('created_at', threeDaysAgo.toISOString())
+
+      if (error) throw error
+
+      return { data: count ? count > 0 : false, error: null }
+    } catch (error) {
+      return { 
+        data: null, 
+        error: error instanceof Error ? error : new Error('Unknown error') 
+      }
+    }
+  }
+}
 
 ================
-File: model/lesson-progress.ts
+File: services/progress.service.ts
 ================
-// features/lessons/model/lesson-progress.ts
+import { SupabaseClient } from '@supabase/supabase-js'
+import { LessonCompletionRecord } from '../types/api.types'
+import { BaseResponse, QueryOptions } from '../types/service.types'
 
-interface LessonProgressState {
-    currentSlideIndex: number
-    completedSlideIds: Set<string>
-    progress: number
-    isStarted: boolean
+export class ProgressService {
+  constructor(private readonly client: SupabaseClient) {}
+
+  async getActivityDates(options?: QueryOptions): Promise<BaseResponse<string[]>> {
+    try {
+      let query = this.client
+        .from('exercise_series')
+        .select('completed_at')
+        .eq('status', 'completed')
+
+      if (options?.from) {
+        query = query.gte('completed_at', options.from)
+      }
+      if (options?.to) {
+        query = query.lte('completed_at', options.to)
+      }
+
+      const { data, error } = await query
+
+      if (error) throw error
+
+      return { 
+        data: data.map(record => record.completed_at.split('T')[0]),
+        error: null 
+      }
+    } catch (error) {
+      return { 
+        data: null, 
+        error: error instanceof Error ? error : new Error('Unknown error') 
+      }
+    }
+  }
+
+  async getLessonProgress(): Promise<BaseResponse<LessonCompletionRecord[]>> {
+    try {
+      const { data, error } = await this.client
+        .from('lesson_completions')
+        .select('*')
+
+      if (error) throw error
+
+      return { data, error: null }
+    } catch (error) {
+      return { 
+        data: null, 
+        error: error instanceof Error ? error : new Error('Unknown error') 
+      }
+    }
+  }
+}
+
+================
+File: types/api.types.ts
+================
+import { DatabaseRecord } from './service.types'
+
+export interface InitialExamRecord extends DatabaseRecord {
+  id: string
+  user_id: string
+  safety_answers: Record<string, unknown>
+  treatment_answers: Record<string, unknown>
+  body_map_id: string | null
+  is_completed: boolean
+}
+
+export interface LessonCompletionRecord extends DatabaseRecord {
+  id: string
+  user_id: string
+  lesson_id: string
+  completed_at: string
+}
+
+// Mock types for exercise data until implemented
+export interface ExerciseRecord extends DatabaseRecord {
+  id: string
+  user_id: string
+  type: string
+  completed_at: string
+  metrics: Record<string, unknown>
+}
+
+================
+File: types/dashboard.types.ts
+================
+export interface InitialExamState {
+  id: string | null
+  isCompleted: boolean
+  bodyMapId: string | null
+  createdAt: string | null
+}
+
+export interface LessonState {
+  id: string
+  isCompleted: boolean
+  completedAt: string | null
+}
+
+export interface ExerciseState {
+  lastCompletedAt: string | null
+  currentStreak: number
+  totalSessions: number
+}
+
+export interface DashboardState {
+  initialExam: InitialExamState
+  lessonCompletions: Record<string, LessonState>
+  exerciseState: ExerciseState
+  romAssessmentLastCompletedAt: string | null
+}
+
+================
+File: types/progress.types.ts
+================
+export interface StreakData {
+    dates: string[]
+    currentStreak: number
+    bestStreak: number
+  }
+  
+  export interface ActivityLog {
+    date: string
+    type: 'exercise' | 'lesson' | 'assessment'
+    id: string
+  }
+  
+  export interface ProgressState {
+    streakData: StreakData
+    activityLog: ActivityLog[]
+    lastActive: string | null
+  }
+  
+  export interface DailyProgress {
+    date: string
     isCompleted: boolean
   }
   
-  export class LessonProgress {
-    private state: LessonProgressState
-  
-    constructor(initial?: Partial<LessonProgressState>) {
-      this.state = {
-        currentSlideIndex: initial?.currentSlideIndex ?? 0,
-        completedSlideIds: new Set(initial?.completedSlideIds),
-        progress: initial?.progress ?? 0,
-        isStarted: initial?.isStarted ?? false,
-        isCompleted: initial?.isCompleted ?? false
-      }
-    }
-  
-    completeSlide(slideId: string, totalSlides: number): void {
-      this.state.completedSlideIds.add(slideId)
-      this.state.progress = (this.state.completedSlideIds.size / totalSlides) * 100
-      
-      // Advance to next slide if not at the end
-      if (this.state.currentSlideIndex < totalSlides - 1) {
-        this.state.currentSlideIndex++
-      }
-      
-      if (this.state.progress === 100) {
-        this.state.isCompleted = true
-      }
-    }
-  
-    startLesson(): void {
-      if (!this.state.isStarted) {
-        this.state.isStarted = true
-        this.state.currentSlideIndex = 0
-      }
-    }
-  
-    advanceSlide(totalSlides: number): boolean {
-      if (this.canAdvance(totalSlides)) {
-        this.state.currentSlideIndex++
-        return true
-      }
-      return false
-    }
-  
-    canAdvance(totalSlides: number): boolean {
-      return this.state.currentSlideIndex < totalSlides - 1
-    }
-  
-    isSlideCompleted(slideId: string): boolean {
-      return this.state.completedSlideIds.has(slideId)
-    }
-  
-    getProgress(): number {
-      return this.state.progress
-    }
-  
-    getCurrentIndex(): number {
-      return this.state.currentSlideIndex
-    }
-  
-    getCompletedSlides(): string[] {
-      return Array.from(this.state.completedSlideIds)
-    }
-  
-    isLessonComplete(): boolean {
-      return this.state.isCompleted
-    }
-  
-    toJSON() {
-      return {
-        currentSlideIndex: this.state.currentSlideIndex,
-        completedSlideIds: Array.from(this.state.completedSlideIds),
-        progress: this.state.progress,
-        isStarted: this.state.isStarted,
-        isCompleted: this.state.isCompleted
-      }
-    }
+  export interface CourseProgress {
+    courseId: string
+    completedLessons: number
+    totalLessons: number
+    lastAccessed: string | null
   }
 
 ================
-File: model/slide-interaction.ts
+File: types/service.types.ts
 ================
-// features/lessons/model/slide-interaction.ts
-
-export type InteractionState = 'viewing' | 'answering' | 'reviewing' | 'explaining'
-
-interface SlideInteractionState {
- state: InteractionState
- selectedOptionId: string | null
- hasSubmitted: boolean 
- hasViewedExplanation: boolean
- isCorrect: boolean | null
-}
-
-export class SlideInteraction {
- private state: SlideInteractionState
-
- constructor(initial?: Partial<SlideInteractionState>) {
-   this.state = {
-     state: initial?.state ?? 'viewing',
-     selectedOptionId: initial?.selectedOptionId ?? null,
-     hasSubmitted: initial?.hasSubmitted ?? false,
-     hasViewedExplanation: initial?.hasViewedExplanation ?? false,
-     isCorrect: initial?.isCorrect ?? null
-   }
- }
-
- selectOption(optionId: string): void {
-   if (this.state.state === 'answering') {
-     this.state.selectedOptionId = optionId
-   }
- }
-
- submit(correctOptionId: string): void {
-   if (!this.state.selectedOptionId) return
-
-   this.state.hasSubmitted = true
-   this.state.isCorrect = this.state.selectedOptionId === correctOptionId
-   this.state.state = 'reviewing'
- }
-
- startAnswering(): void {
-   this.state.state = 'answering'
- }
-
- viewExplanation(): void {
-   this.state.state = 'explaining'
-   this.state.hasViewedExplanation = true
- }
-
- reset(): void {
-   this.state.state = 'answering'
-   this.state.selectedOptionId = null
-   this.state.hasSubmitted = false
-   this.state.isCorrect = null
- }
-
- canSubmit(): boolean {
-   return !!this.state.selectedOptionId && !this.state.hasSubmitted
- }
-
- canViewExplanation(): boolean {
-   return this.state.hasSubmitted && !this.state.hasViewedExplanation
- }
- 
- getState(): InteractionState {
-   return this.state.state
- }
-
- getSelectedOption(): string | null {
-   return this.state.selectedOptionId
- }
-
- isAnswerCorrect(): boolean | null {
-   return this.state.isCorrect
- }
-
- hasReviewed(): boolean {
-   return this.state.hasViewedExplanation
- }
-
- toJSON() {
-   return { ...this.state }
- }
-}
-
-================
-File: model/viewport-state.ts
-================
-// features/lessons/model/viewport-state.ts
-
-interface ViewportBounds {
-    top: number
-    bottom: number
-   }
-   
-   interface SlidePosition {
-    slideId: string
-    bounds: ViewportBounds
-    isActive: boolean
-   }
-   
-   export class ViewportState {
-    private slidePositions: Map<string, SlidePosition>
-    private activeSlideId: string | null
-    private lastScrollPosition: number
-   
-    constructor() {
-      this.slidePositions = new Map()
-      this.activeSlideId = null
-      this.lastScrollPosition = 0
-    }
-   
-    updateSlidePosition(slideId: string, bounds: ViewportBounds): void {
-      this.slidePositions.set(slideId, {
-        slideId,
-        bounds,
-        isActive: false
-      })
-    }
-   
-    setActiveSlide(slideId: string): void {
-      this.activeSlideId = slideId
-      this.slidePositions.forEach(position => {
-        position.isActive = position.slideId === slideId
-      })
-    }
-   
-    isSlideVisible(slideId: string, viewportBounds: ViewportBounds): boolean {
-      const position = this.slidePositions.get(slideId)
-      if (!position) return false
-   
-      return (
-        position.bounds.bottom >= viewportBounds.top && 
-        position.bounds.top <= viewportBounds.bottom
-      )
-    }
-   
-    recordScrollPosition(position: number): void {
-      this.lastScrollPosition = position
-    }
-   
-    getLastScrollPosition(): number {
-      return this.lastScrollPosition
-    }
-   
-    getActiveSlideId(): string | null {
-      return this.activeSlideId
-    }
-   
-    getSlideBounds(slideId: string): ViewportBounds | null {
-      return this.slidePositions.get(slideId)?.bounds ?? null
-    }
-   
-    toJSON() {
-      return {
-        positions: Array.from(this.slidePositions.entries()),
-        activeSlideId: this.activeSlideId,
-        lastScrollPosition: this.lastScrollPosition
-      }
-    }
-   }
-
-================
-File: services/__tests__/lesson-completion.service.test.ts
-================
-// features/lessons/services/__tests__/lesson-completion.service.test.ts
-
-import { lessonCompletionService } from '../lesson-completion.service'
-import SupabaseClientSingleton from '@/lib/supabase/client-singleton'
-
-jest.mock('@/lib/supabase/client-singleton', () => ({
- __esModule: true,
- default: {
-   getInstance: jest.fn()
- }
-}))
-
-describe('LessonCompletionService', () => {
- const mockToken = 'test-token'
- const mockLessonId = 'lesson-1'
- const mockUserId = 'user-1'
- let mockSupabaseClient: any
-
- beforeEach(() => {
-   jest.clearAllMocks()
-   
-   mockSupabaseClient = {
-     from: jest.fn().mockReturnValue({
-       insert: jest.fn().mockReturnThis(),
-       select: jest.fn().mockReturnThis(),
-       single: jest.fn()
-     }),
-     rpc: jest.fn()
-   }
-
-   ;(SupabaseClientSingleton.getInstance as jest.Mock).mockResolvedValue(mockSupabaseClient)
- })
-
- describe('createCompletion', () => {
-   beforeEach(() => {
-     mockSupabaseClient.rpc.mockResolvedValue({
-       data: mockUserId,
-       error: null
-     })
-   })
-
-   it('should create a new completion record', async () => {
-     const mockCompletion = {
-       id: '123',
-       lesson_id: mockLessonId,
-       user_id: mockUserId,
-       completed_at: new Date().toISOString()
-     }
-
-     mockSupabaseClient.from().single.mockResolvedValue({
-       data: mockCompletion,
-       error: null
-     })
-
-     const result = await lessonCompletionService.createCompletion(
-       { lesson_id: mockLessonId }, 
-       mockToken
-     )
-     
-     expect(result).toEqual(mockCompletion)
-     expect(mockSupabaseClient.from).toHaveBeenCalledWith('lesson_completions')
-     expect(mockSupabaseClient.rpc).toHaveBeenCalledWith('requesting_user_id')
-   })
-
-   it('should throw error when user id not found', async () => {
-     mockSupabaseClient.rpc.mockResolvedValue({
-       data: null,
-       error: null
-     })
-
-     await expect(
-       lessonCompletionService.createCompletion(
-         { lesson_id: mockLessonId }, 
-         mockToken
-       )
-     ).rejects.toThrow('No user ID found in JWT claims')
-   })
- })
-})
-
-================
-File: services/__tests__/use-lesson-completion.test.ts
-================
-// features/lessons/hooks/__tests__/use-lesson-completion.test.ts
-
-import { renderHook, act } from '@testing-library/react'
-import { useAuth } from '@clerk/nextjs'
-import { useLessonCompletion } from '../../hooks/use-lesson-completion'
-import { createCompletion } from '../../actions/lesson-completion'
-
-// Mock dependencies
-jest.mock('@clerk/nextjs', () => ({
-  useAuth: jest.fn()
-}))
-
-jest.mock('../../actions/lesson-completion', () => ({
-  createCompletion: jest.fn()
-}))
-
-describe('useLessonCompletion', () => {
-  const mockLessonId = 'lesson-1'
-  const mockToken = 'test-token'
-
-  beforeEach(() => {
-    jest.clearAllMocks()
-    ;(useAuth as jest.Mock).mockReturnValue({
-      getToken: jest.fn().mockResolvedValue(mockToken)
-    })
-  })
-
-  it('should handle successful completion', async () => {
-    ;(createCompletion as jest.Mock).mockResolvedValue({
-      id: '123',
-      lesson_id: mockLessonId,
-      completed_at: new Date().toISOString()
-    })
-
-    const { result } = renderHook(() => useLessonCompletion(mockLessonId))
-
-    expect(result.current.isCompleting).toBe(false)
-    expect(result.current.error).toBeNull()
-
-    await act(async () => {
-      await result.current.complete()
-    })
-
-    expect(createCompletion).toHaveBeenCalledWith(mockLessonId, mockToken)
-    expect(result.current.isCompleting).toBe(false)
-    expect(result.current.error).toBeNull()
-  })
-
-  it('should handle completion errors', async () => {
-    const error = new Error('Failed to complete')
-    ;(createCompletion as jest.Mock).mockRejectedValue(error)
-
-    const { result } = renderHook(() => useLessonCompletion(mockLessonId))
-
-    await act(async () => {
-      try {
-        await result.current.complete()
-        
-      } catch (e) {
-        // Error is expected
-      }
-    })
-
-    expect(result.current.isCompleting).toBe(false)
-    expect(result.current.error).toEqual(error)
-  })
-})
-
-================
-File: services/lesson-completion.service.ts
-================
-// /features/lessons/services/lesson-completion.service.ts
-import { BaseService } from '@/lib/supabase/services/base'
-import type { LessonCompletion, CreateLessonCompletion } from '../types/db.types'
-
-// features/lessons/services/lesson-completion.service.ts
-
-export class LessonCompletionService extends BaseService {
-    private readonly table = 'lesson_completions'
-  
-    async createCompletion(completion: CreateLessonCompletion, token?: string | null): Promise<LessonCompletion> {
-      return this.withErrorHandling(async () => {
-        const client = await this.getClient(token)
-        
-        const { data: claims } = await client.rpc('requesting_user_id')
-        if (!claims) throw new Error('No user ID found in JWT claims')
-  
-        const { data, error } = await client
-          .from(this.table)
-          .insert({ ...completion, user_id: claims })
-          .select()
-          .single()
-        
-        if (error) throw error
-        return data
-      })
-    }
+export interface BaseResponse<T> {
+    data: T | null
+    error: Error | null
   }
   
-  export const lessonCompletionService = new LessonCompletionService()
-
-================
-File: services/lesson.service.ts
-================
-// features/lessons/services/lesson.service.ts
-
-import { BaseService } from '@/lib/supabase/services/base'
-import type { Lesson, CreateLesson, UpdateLesson } from '../types/lesson.types'
-
-export class LessonService extends BaseService {
-  private readonly table = 'lessons'
-
-  async getLesson(lessonId: string, token?: string | null): Promise<Lesson | null> {
-    return this.withErrorHandling(async () => {
-      const client = await this.getClient(token)
-      const { data, error } = await client
-        .from(this.table)
-        .select('*')
-        .eq('id', lessonId)
-        .maybeSingle()
-      
-      if (error) throw error
-      return data
-    })
-  }
-
-  async getLessonProgress(userId: string, lessonId: string, token?: string | null): Promise<Lesson | null> {
-    return this.withErrorHandling(async () => {
-      const client = await this.getClient(token)
-      const { data, error } = await client
-        .from(this.table)
-        .select('*')
-        .eq('id', lessonId)
-        .eq('user_id', userId)
-        .maybeSingle()
-
-      if (error) throw error
-      return data
-    })
-  }
-
-  async createLessonProgress(lesson: CreateLesson, token?: string | null): Promise<Lesson> {
-    return this.withErrorHandling(async () => {
-      const client = await this.getClient(token)
-
-      // Get the user_id from the JWT claims
-      const { data: claims, error: claimsError } = await client.rpc('requesting_user_id')
-      if (claimsError) throw claimsError
-      if (!claims) throw new Error('No user ID found in JWT claims')
-
-      const { data, error } = await client
-        .from(this.table)
-        .insert({ ...lesson, user_id: claims })
-        .select()
-        .single()
-      
-      if (error) throw error
-      return data
-    })
-  }
-
-  async updateLessonProgress(
-    lessonId: string, 
-    updates: UpdateLesson, 
-    token?: string | null
-  ): Promise<Lesson> {
-    return this.withErrorHandling(async () => {
-      const client = await this.getClient(token)
-      const { data, error } = await client
-        .from(this.table)
-        .update({ 
-          ...updates, 
-          updated_at: new Date().toISOString() 
-        })
-        .eq('id', lessonId)
-        .select()
-        .single()
-      
-      if (error) throw error
-      return data
-    })
-  }
-
-  async completeSlide(
-    lessonId: string,
-    slideId: string,
-    token?: string | null
-  ): Promise<Lesson> {
-    return this.withErrorHandling(async () => {
-      const client = await this.getClient(token)
-      
-      // First get the current lesson to update completed slides
-      const { data: currentLesson, error: fetchError } = await client
-        .from(this.table)
-        .select('*')
-        .eq('id', lessonId)
-        .single()
-
-      if (fetchError) throw fetchError
-
-      const completedSlideIds = new Set([
-        ...currentLesson.completedSlideIds,
-        slideId
-      ])
-
-      // Calculate new progress
-      const totalSlides = currentLesson.slides.length
-      const progress = (completedSlideIds.size / totalSlides) * 100
-
-      // Update the lesson
-      const { data, error } = await client
-        .from(this.table)
-        .update({
-          completedSlideIds: Array.from(completedSlideIds),
-          progress,
-          updated_at: new Date().toISOString()
-        })
-        .eq('id', lessonId)
-        .select()
-        .single()
-
-      if (error) throw error
-      return data
-    })
-  }
-}
-
-export const lessonService = new LessonService()
-
-================
-File: types/db.types.ts
-================
-// /features/lessons/types/db.types.ts
-export interface LessonCompletion {
-    id: string
-    user_id: string
-    lesson_id: string
-    completed_at: string
+  export interface QueryOptions {
+    from?: string
+    to?: string
+    limit?: number
   }
   
-  export type CreateLessonCompletion = Pick<LessonCompletion, 'lesson_id'>
-
-================
-File: types/lesson.types.ts
-================
-// features/lessons/types/lesson.types.ts
-
-export interface BaseSlide {
-    id: string
-    type: SlideType
-    nextRoute?: string
+  export interface DatabaseRecord {
+    created_at: string
+    updated_at?: string
   }
-  
-  export type SlideType = 'info' | 'question' | 'infoBullet'
-  
-  export interface InfoSlide extends BaseSlide {
-    type: 'info'
-    title: string
-    body: string
-    imageUrl?: string
-  }
-  
-  export interface QuestionSlide extends BaseSlide {
-    type: 'question'
-    question: string
-    options: QuestionOption[]
-    explanation?: string
-    imageUrl?: string
-  }
-  
-  export interface InfoBulletSlide extends BaseSlide {
-    type: 'infoBullet'
-    title: string
-    introduction?: string
-    bullets: BulletPoint[]
-    imageUrl?: string
-  }
-  
-  export interface QuestionOption {
-    id: string
-    text: string
-    isCorrect: boolean
-  }
-  
-  export interface BulletPoint {
-    text: string
-  }
-  
-  export type Slide = InfoSlide | QuestionSlide | InfoBulletSlide
-  
-  export interface Lesson {
-    id: string
-    title: string
-    description?: string
-    slides: Slide[]
-    progress: number
-    currentSlideIndex: number
-    completedSlideIds: string[]
-    createdAt: string
-    updatedAt: string
-    userId: string
-  }
-  
-  export type CreateLesson = Omit<Lesson, 'id' | 'createdAt' | 'updatedAt'>
-  export type UpdateLesson = Partial<Omit<Lesson, 'id' | 'userId' | 'createdAt' | 'updatedAt'>>
 
 
 

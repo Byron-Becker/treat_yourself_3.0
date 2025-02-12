@@ -47,7 +47,7 @@ export function useDashboardState() {
     }
 
     loadDashboardState()
-  }, [getToken])
+  }, [getToken, dashboardModel])
 
   return {
     state: dashboardModel.getState(),

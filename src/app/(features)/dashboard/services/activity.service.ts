@@ -1,14 +1,15 @@
-import { SupabaseClient } from '@supabase/supabase-js'
+import { BaseService } from '@/lib/supabase/services/base'
 import { ExerciseRecord } from '../types/api.types'
 import { BaseResponse, QueryOptions } from '../types/service.types'
 
-export class ActivityService {
-  constructor(private readonly client: SupabaseClient) {}
+export class ActivityService extends BaseService {
+  private readonly table = 'exercise_series'
 
   async getRecentActivity(options?: QueryOptions): Promise<BaseResponse<ExerciseRecord[]>> {
-    try {
-      let query = this.client
-        .from('exercise_series')
+    return this.withErrorHandling(async () => {
+      const client = await this.getClient(this.token)
+      let query = client
+        .from(this.table)
         .select('*')
         .order('completed_at', { ascending: false })
 
@@ -21,18 +22,14 @@ export class ActivityService {
       if (error) throw error
 
       return { data, error: null }
-    } catch (error) {
-      return { 
-        data: null, 
-        error: error instanceof Error ? error : new Error('Unknown error') 
-      }
-    }
+    })
   }
 
   async getCurrentStreak(): Promise<BaseResponse<number>> {
-    try {
-      const { data: dates, error } = await this.client
-        .from('exercise_series')
+    return this.withErrorHandling(async () => {
+      const client = await this.getClient(this.token)
+      const { data: dates, error } = await client
+        .from(this.table)
         .select('completed_at')
         .eq('status', 'completed')
         .order('completed_at', { ascending: false })
@@ -43,12 +40,7 @@ export class ActivityService {
       const streak = this.calculateStreak(dates.map(d => d.completed_at))
 
       return { data: streak, error: null }
-    } catch (error) {
-      return { 
-        data: null, 
-        error: error instanceof Error ? error : new Error('Unknown error') 
-      }
-    }
+    })
   }
 
   private calculateStreak(dates: string[]): number {

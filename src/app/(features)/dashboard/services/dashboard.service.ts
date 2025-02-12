@@ -1,67 +1,57 @@
-import { SupabaseClient } from '@supabase/supabase-js'
+import { BaseService } from '@/lib/supabase/services/base'
 import { 
   InitialExamRecord, 
   LessonCompletionRecord 
 } from '../types/api.types'
 import { BaseResponse } from '../types/service.types'
 
-export class DashboardService {
-  constructor(private readonly client: SupabaseClient) {}
+export class DashboardService extends BaseService {
+  private readonly examTable = 'initial_exams'
+  private readonly completionsTable = 'lesson_completions'
+  private readonly romTable = 'rom_assessments'
 
   async getInitialExamStatus(): Promise<BaseResponse<InitialExamRecord>> {
-    try {
-      const { data, error } = await this.client
-        .from('initial_exams')
+    return this.withErrorHandling(async () => {
+      const client = await this.getClient(this.token)
+      const { data, error } = await client
+        .from(this.examTable)
         .select('*')
         .maybeSingle()
 
       if (error) throw error
 
       return { data, error: null }
-    } catch (error) {
-      return { 
-        data: null, 
-        error: error instanceof Error ? error : new Error('Unknown error') 
-      }
-    }
+    })
   }
 
   async getLessonCompletions(): Promise<BaseResponse<LessonCompletionRecord[]>> {
-    try {
-      const { data, error } = await this.client
-        .from('lesson_completions')
+    return this.withErrorHandling(async () => {
+      const client = await this.getClient(this.token)
+      const { data, error } = await client
+        .from(this.completionsTable)
         .select('*')
         .order('completed_at', { ascending: false })
 
       if (error) throw error
 
       return { data, error: null }
-    } catch (error) {
-      return { 
-        data: null, 
-        error: error instanceof Error ? error : new Error('Unknown error') 
-      }
-    }
+    })
   }
 
   async hasRecentROMAssessment(): Promise<BaseResponse<boolean>> {
-    try {
+    return this.withErrorHandling(async () => {
+      const client = await this.getClient(this.token)
       const threeDaysAgo = new Date()
       threeDaysAgo.setDate(threeDaysAgo.getDate() - 3)
 
-      const { count, error } = await this.client
-        .from('rom_assessments')
+      const { count, error } = await client
+        .from(this.romTable)
         .select('*', { count: 'exact', head: true })
         .gte('created_at', threeDaysAgo.toISOString())
 
       if (error) throw error
 
       return { data: count ? count > 0 : false, error: null }
-    } catch (error) {
-      return { 
-        data: null, 
-        error: error instanceof Error ? error : new Error('Unknown error') 
-      }
-    }
+    })
   }
 }

@@ -3,6 +3,7 @@ import { useAuth } from '@clerk/nextjs'
 import { ProgressTrackingModel } from '../model/progress-tracking'
 import { ProgressService } from '../services/progress.service'
 
+
 export function useProgressTracking() {
   const { getToken } = useAuth()
   const [progressModel] = useState(() => new ProgressTrackingModel())
@@ -37,7 +38,7 @@ export function useProgressTracking() {
     }
 
     loadProgressData()
-  }, [getToken])
+  }, [getToken, progressModel])
 
   return {
     streakData: progressModel.getStreakData(),

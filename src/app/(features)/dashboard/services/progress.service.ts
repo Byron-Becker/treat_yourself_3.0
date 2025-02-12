@@ -1,14 +1,15 @@
-import { SupabaseClient } from '@supabase/supabase-js'
+import { BaseService } from '@/lib/supabase/services/base'
 import { LessonCompletionRecord } from '../types/api.types'
 import { BaseResponse, QueryOptions } from '../types/service.types'
 
-export class ProgressService {
-  constructor(private readonly client: SupabaseClient) {}
+export class ProgressService extends BaseService {
+  private readonly table = 'exercise_series'
 
   async getActivityDates(options?: QueryOptions): Promise<BaseResponse<string[]>> {
-    try {
-      let query = this.client
-        .from('exercise_series')
+    return this.withErrorHandling(async () => {
+      const client = await this.getClient(this.token)
+      let query = client
+        .from(this.table)
         .select('completed_at')
         .eq('status', 'completed')
 
@@ -27,28 +28,19 @@ export class ProgressService {
         data: data.map(record => record.completed_at.split('T')[0]),
         error: null 
       }
-    } catch (error) {
-      return { 
-        data: null, 
-        error: error instanceof Error ? error : new Error('Unknown error') 
-      }
-    }
+    })
   }
 
   async getLessonProgress(): Promise<BaseResponse<LessonCompletionRecord[]>> {
-    try {
-      const { data, error } = await this.client
+    return this.withErrorHandling(async () => {
+      const client = await this.getClient(this.token)
+      const { data, error } = await client
         .from('lesson_completions')
         .select('*')
 
       if (error) throw error
 
       return { data, error: null }
-    } catch (error) {
-      return { 
-        data: null, 
-        error: error instanceof Error ? error : new Error('Unknown error') 
-      }
-    }
+    })
   }
 }
