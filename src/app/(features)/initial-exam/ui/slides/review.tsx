@@ -17,7 +17,7 @@ interface ReviewSlideProps {
 function calculateTotalScore(selections: Record<string, boolean>): number {
   const allBodyParts = [...frontBodyParts, ...backBodyParts]
   return Object.entries(selections)
-    .filter(([_, selected]) => selected)
+    .filter(([selected]) => selected)
     .reduce((total, [partId]) => {
       const part = allBodyParts.find(p => p.id === partId)
       return total + (part?.score || 0)

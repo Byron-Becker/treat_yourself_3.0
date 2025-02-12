@@ -2,7 +2,7 @@
 import { create } from 'zustand'
 import { devtools, persist } from 'zustand/middleware'
 import { ExamAnswers, ExamStep, ExamAnswerTypes } from '../types'
-import { saveExamAnswers, updateExamAnswers, completeExam } from '../api/actions'
+import { saveExamAnswers } from '../api/actions'
 
 interface ExamState {
   examId: string | null
@@ -150,16 +150,11 @@ export const useExamStore = create<ExamState>()(
           'exam/cleanup'
         ),
 
-        saveProgress: async (token: string | null) => {
+        saveProgress: async () => {
           try {
             set({ isSubmitting: true, error: null })
-            const { answers, examId } = get()
-
-            const result = examId 
-              ? await updateExamAnswers(examId, answers, token)
-              : await saveExamAnswers(answers, token)
-
-            set({ examId: result.id })
+            // Store answers in state but don't save to database yet
+            set({ error: null })
           } catch (error) {
             set({ error: error as Error })
             throw error
@@ -171,12 +166,11 @@ export const useExamStore = create<ExamState>()(
         submitExam: async (token: string | null) => {
           try {
             set({ isSubmitting: true, error: null })
-            const { examId } = get()
-            if (!examId) {
-              await get().saveProgress(token)
-            }
+            const { answers } = get()
             
-            await completeExam(get().examId!, token)
+            // Save everything at once when submitting
+            const result = await saveExamAnswers(answers, token)
+            set({ examId: result.id })
           } catch (error) {
             set({ error: error as Error })
             throw error
