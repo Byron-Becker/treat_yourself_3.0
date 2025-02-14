@@ -20,7 +20,7 @@ interface ExerciseContainerProps {
 }
 
 export function ExerciseContainer({ exercise }: ExerciseContainerProps) {
-  const { isLoaded, isSignedIn } = useAuth()
+  const { isLoaded, isSignedIn, getToken } = useAuth()
   const router = useRouter()
 
   const {
@@ -47,9 +47,40 @@ export function ExerciseContainer({ exercise }: ExerciseContainerProps) {
 
   // Initialize the first exercise
   useEffect(() => {
-    console.log('Initializing first exercise')
-    initializeExercise(exercise)
-  }, [exercise, initializeExercise])
+    const init = async () => {
+      if (!isLoaded) {
+        console.log('Auth not loaded yet')
+        return
+      }
+
+      if (!isSignedIn) {
+        console.log('User not signed in, redirecting to sign-in')
+        router.push('/sign-in')
+        return
+      }
+
+      try {
+        console.log('Getting Supabase token...')
+        const token = await getToken({ template: 'supabase' })
+        if (!token) {
+          console.error('❌ No auth token available')
+          return
+        }
+        console.log('✅ Got auth token:', token.slice(0, 10) + '...')
+
+        console.log('Initializing exercise with token...')
+        await initializeExercise(exercise, token)
+        console.log('✅ Exercise initialized successfully')
+      } catch (error) {
+        console.error('❌ Failed to initialize exercise:', error)
+        // TODO: Show error message to user
+      }
+    }
+    
+    if (isLoaded) {
+      init()
+    }
+  }, [exercise, initializeExercise, isLoaded, isSignedIn, getToken, router])
 
   // Handle question appearance after 5 seconds
   useEffect(() => {
@@ -99,9 +130,21 @@ export function ExerciseContainer({ exercise }: ExerciseContainerProps) {
     const currentExercise = exerciseStates[currentExerciseIndex]
     if (!currentExercise) return
 
-    if (status === 'stopped_early') {
-      console.log('Exercise stopped early, redirecting to dashboard')
+    console.log('Exercise completion check:', {
+      status,
+      hasStopAnswer: currentExercise.answers['stop'],
+      answers: currentExercise.answers
+    })
+
+    // Only redirect if explicitly stopped via stop button or negative responses
+    if (status === 'stopped_early' && 
+        (currentExercise.answers['stop'] === 'return_to_dashboard' || 
+         currentExercise.answers['initial'] === 'worse' || 
+         currentExercise.answers['location'] === 'peripheral')) {
+      console.log('Exercise explicitly stopped via stop button or negative response')
       router.push('/dashboard')
+    } else if (status === 'stopped_early') {
+      console.log('Exercise status is stopped_early but not from explicit stop - likely a state issue')
     }
   }, [status, exerciseStates, currentExerciseIndex, router])
 

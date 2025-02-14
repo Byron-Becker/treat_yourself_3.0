@@ -45,8 +45,11 @@ export const QuestionSlide = forwardRef<HTMLDivElement, QuestionSlideProps>(({
               className={`w-full justify-start text-left h-auto p-4 ${
                 selectedAnswer === option.id ? 'bg-blue-50 border-blue-500 text-blue-700' : ''
               }`}
-              onClick={() => onAnswerSelected(questionId, option.id)}
-              disabled={state.answers[questionId] !== undefined}
+              onClick={() => {
+                if (!selectedAnswer) {
+                  onAnswerSelected(questionId, option.id)
+                }
+              }}
             >
               {option.text}
             </Button>

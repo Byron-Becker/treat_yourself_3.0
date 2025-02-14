@@ -32,6 +32,24 @@
  * Clerk's authentication and Supabase's storage/database systems.
  */
 
+-- First enable RLS on the table
+ALTER TABLE exercise_sessions ENABLE ROW LEVEL SECURITY;
+
+-- Drop any existing policies (if needed)
+DROP POLICY IF EXISTS exercise_sessions_policy ON exercise_sessions;
+
+-- Create the policy
+CREATE POLICY exercise_sessions_policy ON exercise_sessions 
+FOR ALL 
+USING (
+    EXISTS (
+        SELECT 1 
+        FROM exercise_series 
+        WHERE exercise_series.id = exercise_sessions.series_id 
+        AND exercise_series.user_id = auth.uid()
+    )
+);
+
 
 
 
