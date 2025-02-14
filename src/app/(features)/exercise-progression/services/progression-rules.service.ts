@@ -5,6 +5,16 @@ import {
 
 export class ProgressionRulesService {
   evaluateResponses(responses: ResponseSet): ResponseEvaluation {
+    // Check for return to dashboard response first
+    if (responses.stop === 'return_to_dashboard' || responses.completion === 'finish') {
+      return {
+        canProgress: false,
+        shouldStop: true,
+        nextQuestionId: null,
+        message: 'Returning to dashboard'
+      }
+    }
+
     // If no initial response yet, can't evaluate
     if (!responses.initial) {
       return {
@@ -18,7 +28,8 @@ export class ProgressionRulesService {
     if (responses.initial === 'worse') {
       return {
         canProgress: false,
-        shouldStop: true,
+        shouldStop: false,
+        nextQuestionId: 'stop',
         message: 'Exercise stopped due to worsening symptoms'
       }
     }
@@ -36,8 +47,21 @@ export class ProgressionRulesService {
     if (responses.location === 'peripheral') {
       return {
         canProgress: false,
-        shouldStop: true,
+        shouldStop: false,
+        nextQuestionId: 'stop',
         message: 'Exercise stopped due to symptoms moving peripherally'
+      }
+    }
+
+    // For the last exercise, if we have good responses, show completion instead of continue
+    if (responses.exerciseId === '3' && 
+        (responses.initial === 'better' || responses.initial === 'same') && 
+        (responses.location === 'central' || responses.location === 'same')) {
+      return {
+        canProgress: false,
+        shouldStop: false,
+        nextQuestionId: 'completion',
+        message: 'Exercise series completed'
       }
     }
 
@@ -79,6 +103,8 @@ export class ProgressionRulesService {
       case 'continue':
         return response === 'yes' ? null : 'stop'
       case 'stop':
+        return null
+      case 'completion':
         return null
       default:
         return 'initial'

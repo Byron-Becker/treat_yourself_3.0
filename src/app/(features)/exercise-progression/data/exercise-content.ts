@@ -138,23 +138,18 @@ export const questions: Record<string, Question> = {
   },
   'stop': {
     id: 'stop',
-    text: 'We should stop this exercise. Would you like to try a different position?',
+    text: 'We should stop this exercise.',
     options: [
-      { 
-        id: 'yes', 
-        text: 'Yes',
-        nextQuestionId: null
-      },
-      { 
-        id: 'no', 
-        text: 'No',
+      {
+        id: "return_to_dashboard",
+        text: "Return to Dashboard",
         nextQuestionId: null
       }
     ]
   },
   'completion': {
     id: 'completion',
-    text: 'Congratulations! You have completed the exercise series.',
+    text: 'This is the last exercise in the series. When you are done with it, please return to the dashboard.',
     options: [
       { 
         id: 'finish', 

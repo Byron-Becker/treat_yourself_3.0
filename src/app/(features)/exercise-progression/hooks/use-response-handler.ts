@@ -23,7 +23,7 @@ export function useResponseHandler({
       [questionId]: answerId
     })
 
-    if (evaluation.shouldStop) {
+    if (evaluation.shouldStop && questionId === 'stop' && answerId === 'return_to_dashboard') {
       router.push('/dashboard')
       return
     }

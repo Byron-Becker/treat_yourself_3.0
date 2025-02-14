@@ -121,21 +121,25 @@ export const useProgressionStore = create<ProgressionStore>((set, get) => ({
     // Evaluate the response
     const evaluation = rulesService.evaluateResponses({
       ...currentExercise.answers,
-      [questionId]: answerId
+      [questionId]: answerId,
+      exerciseId: currentExercise.id
     })
 
     console.log('Response evaluation:', evaluation)
 
-    if (evaluation.shouldStop) {
-      console.log('Stopping exercise due to evaluation')
+    // Handle return to dashboard
+    if (questionId === 'stop' && answerId === 'return_to_dashboard' || 
+        questionId === 'completion' && answerId === 'finish') {
+      console.log('Returning to dashboard')
       set({
-        status: 'stopped_early',
+        status: questionId === 'stop' ? 'stopped_early' : 'completed',
         exercises: updatedExercises.map((exercise, index) =>
           index === state.currentExerciseIndex
             ? { ...exercise, completedAt: new Date().toISOString() }
             : exercise
         )
       })
+      window.location.href = '/dashboard'
       return
     }
 
@@ -167,6 +171,21 @@ export const useProgressionStore = create<ProgressionStore>((set, get) => ({
           shouldScrollToNewExercise: true
         })
         return
+      } else {
+        // This is the final exercise and they've completed it successfully
+        console.log('Final exercise completed')
+        set({
+          exercises: updatedExercises.map((exercise, index) =>
+            index === state.currentExerciseIndex
+              ? {
+                  ...exercise,
+                  currentQuestionId: 'completion',
+                  visibleQuestions: [...exercise.visibleQuestions, 'completion']
+                }
+              : exercise
+          )
+        })
+        return
       }
     }
 
@@ -178,8 +197,10 @@ export const useProgressionStore = create<ProgressionStore>((set, get) => ({
           index === state.currentExerciseIndex
             ? {
                 ...exercise,
-                currentQuestionId: evaluation.nextQuestionId,
-                visibleQuestions: [...exercise.visibleQuestions, evaluation.nextQuestionId]
+                currentQuestionId: evaluation.nextQuestionId!,
+                visibleQuestions: exercise.visibleQuestions.includes(evaluation.nextQuestionId!)
+                  ? exercise.visibleQuestions
+                  : [...exercise.visibleQuestions, evaluation.nextQuestionId!]
               }
             : exercise
         )
