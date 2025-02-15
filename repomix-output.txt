@@ -57,6 +57,8 @@ components/slides/setup-slide.tsx
 data/exercise-content.ts
 data/index.ts
 hooks/index.ts
+hooks/use-exercise-scroll.ts
+hooks/use-exercise-timer.ts
 hooks/use-progression-state.ts
 hooks/use-response-handler.ts
 hooks/use-timer-state.ts
@@ -69,6 +71,7 @@ model/timer.ts
 services/exercise-progression.service.ts
 services/index.ts
 services/progression-rules.service.ts
+store/use-progression-store.ts
 types/exercise.types.ts
 types/index.ts
 types/progression.types.ts
@@ -89,13 +92,14 @@ import { notFound } from 'next/navigation'
 import { Metadata } from 'next'
 
 interface PageProps {
-  params: {
+  params: Promise<{
     id: string
-  }
+  }>
 }
 
 export default async function ExercisePage({ params }: PageProps) {
-  const exercise = exercises[params.id]
+  const { id } = await params
+  const exercise = exercises[id]
 
   if (!exercise) {
     notFound()
@@ -106,7 +110,8 @@ export default async function ExercisePage({ params }: PageProps) {
 
 // Generate metadata for the page
 export async function generateMetadata({ params }: PageProps): Promise<Metadata> {
-  const exercise = exercises[params.id]
+  const { id } = await params
+  const exercise = exercises[id]
 
   if (!exercise) {
     return {
@@ -133,127 +138,234 @@ File: components/exercise-container.tsx
 ================
 'use client'
 
+import { useEffect } from 'react'
 import { useAuth } from '@clerk/nextjs'
 import { useRouter } from 'next/navigation'
 import { Exercise } from '../types'
-import { useProgressionState, useResponseHandler } from '../hooks'
+import { useProgressionStore } from '../store/use-progression-store'
 import { ExerciseHeader } from './exercise-header'
 import { ExerciseFooter } from './exercise-footer'
 import { SetupSlide } from './slides/setup-slide'
 import { InstructionSlide } from './slides/instruction-slide'
 import { QuestionSlide } from './slides/question-slide'
 import { LoadingOverlay } from './loading-overlay'
-import { useEffect, useRef} from 'react'
-import { Timer } from '../types'
-import { useTimer } from '../hooks/use-timer'
+import { exercises } from '../data/exercise-content'
+import { useExerciseTimer } from '../hooks/use-exercise-timer'
+import { useExerciseScroll } from '../hooks/use-exercise-scroll'
 
 interface ExerciseContainerProps {
   exercise: Exercise
 }
 
 export function ExerciseContainer({ exercise }: ExerciseContainerProps) {
-  const { isLoaded, isSignedIn } = useAuth()
+  const { isLoaded, isSignedIn, getToken } = useAuth()
   const router = useRouter()
 
   const {
-    state,
+    exercises: exerciseStates,
+    currentExerciseIndex,
+    status,
+    initializeExercise,
     startExercise,
     pauseExercise,
     submitResponse,
-    updateTimeRemaining
-  } = useProgressionState([exercise])
+  } = useProgressionStore()
 
-  const currentExercise = state.exercises[state.currentExerciseIndex]
-  const currentState = state.states[state.currentExerciseIndex]
+  // Initialize hooks
+  useExerciseTimer()
+  const {
+    scrollToQuestion,
+    scrollToInstruction,
+    scrollToSetup,
+    getQuestionRef,
+    getInstructionRef,
+    getSetupRef,
+    scrollWithRetry
+  } = useExerciseScroll()
 
-  const { handleResponse, canContinue } = useResponseHandler({
-    onSubmitResponse: submitResponse,
-    currentResponses: currentState.answers
-  })
-
-  const timer = useTimer(exercise.duration)
-  const timerRef = useRef<Timer>(timer)
-  
+  // Initialize the first exercise
   useEffect(() => {
-    timerRef.current = timer
-  }, [timer])
+    const init = async () => {
+      if (!isLoaded) {
+        console.log('Auth not loaded yet')
+        return
+      }
 
-  useEffect(() => {
-    const handleTimeUpdate = (timeRemaining: number) => {
-      console.log('Timer update:', timeRemaining)
-      updateTimeRemaining(timeRemaining)
+      if (!isSignedIn) {
+        console.log('User not signed in, redirecting to sign-in')
+        router.push('/sign-in')
+        return
+      }
+
+      try {
+        console.log('Getting Supabase token...')
+        const token = await getToken({ template: 'supabase' })
+        if (!token) {
+          console.error('❌ No auth token available')
+          return
+        }
+        console.log('✅ Got auth token:', token.slice(0, 10) + '...')
+
+        console.log('Initializing exercise with token...')
+        await initializeExercise(exercise, token)
+        console.log('✅ Exercise initialized successfully')
+      } catch (error) {
+        console.error('❌ Failed to initialize exercise:', error)
+        // TODO: Show error message to user
+      }
     }
-
-    timerRef.current.addListener(handleTimeUpdate)
-    return () => timerRef.current.removeListener(handleTimeUpdate)
-  }, [updateTimeRemaining])
-
-  useEffect(() => {
-    console.log('Timer state effect:', { isTimerActive: currentState.isTimerActive })
-    if (currentState.isTimerActive) {
-      timerRef.current.start()
-    } else {
-      timerRef.current.pause()
+    
+    if (isLoaded) {
+      init()
     }
-  }, [currentState.isTimerActive])
+  }, [exercise, initializeExercise, isLoaded, isSignedIn, getToken, router])
 
+  // Handle question appearance after 5 seconds
+  useEffect(() => {
+    const currentExercise = exerciseStates[currentExerciseIndex]
+    if (!currentExercise) return
+
+    if (
+      currentExercise.isTimerActive && 
+      currentExercise.timeRemaining === exercise.duration - 1 &&
+      !currentExercise.currentQuestionId
+    ) {
+      console.log('Adding initial question after 5 seconds')
+      submitResponse('initial', '')
+    }
+  }, [exerciseStates, currentExerciseIndex, exercise.duration, submitResponse])
+
+  // Handle scroll on phase changes
+  useEffect(() => {
+    const currentExercise = exerciseStates[currentExerciseIndex]
+    if (!currentExercise) return
+
+    if (currentExercise.phase === 'active') {
+      scrollWithRetry(() => scrollToInstruction())
+    }
+  }, [currentExerciseIndex, exerciseStates, scrollToInstruction, scrollWithRetry])
+
+  // Handle scroll on question changes
+  useEffect(() => {
+    const currentExercise = exerciseStates[currentExerciseIndex]
+    if (!currentExercise?.currentQuestionId) return
+
+    scrollWithRetry(() => scrollToQuestion(currentExercise.currentQuestionId!))
+  }, [currentExerciseIndex, exerciseStates, scrollToQuestion, scrollWithRetry])
+
+  // Handle scroll to new exercise
+  useEffect(() => {
+    const shouldScroll = useProgressionStore.getState().shouldScrollToNewExercise
+    if (shouldScroll) {
+      console.log('Scrolling to new exercise:', exerciseStates[currentExerciseIndex]?.id)
+      scrollWithRetry(() => scrollToSetup(exerciseStates[currentExerciseIndex]?.id))
+      useProgressionStore.setState({ shouldScrollToNewExercise: false })
+    }
+  }, [currentExerciseIndex, exerciseStates, scrollToSetup, scrollWithRetry])
+
+  // Handle exercise completion
+  useEffect(() => {
+    const currentExercise = exerciseStates[currentExerciseIndex]
+    if (!currentExercise) return
+
+    console.log('Exercise completion check:', {
+      status,
+      hasStopAnswer: currentExercise.answers['stop'],
+      answers: currentExercise.answers
+    })
+
+    // Only redirect if explicitly stopped via stop button or negative responses
+    if (status === 'stopped_early' && 
+        (currentExercise.answers['stop'] === 'return_to_dashboard' || 
+         currentExercise.answers['initial'] === 'worse' || 
+         currentExercise.answers['location'] === 'peripheral')) {
+      console.log('Exercise explicitly stopped via stop button or negative response')
+      router.push('/dashboard')
+    } else if (status === 'stopped_early') {
+      console.log('Exercise status is stopped_early but not from explicit stop - likely a state issue')
+    }
+  }, [status, exerciseStates, currentExerciseIndex, router])
+
+  // Redirect if not signed in
   if (!isLoaded) return <LoadingOverlay />
   if (!isSignedIn) {
     router.push('/sign-in')
     return null
   }
 
+  const currentExercise = exerciseStates[currentExerciseIndex]
+  if (!currentExercise) return <LoadingOverlay />
+
   return (
     <div className="min-h-[100dvh] flex flex-col">
-      <ExerciseHeader 
-        name={exercise.name}
-        timeRemaining={currentState.timeRemaining}
-        isActive={currentState.isTimerActive}
-      />
+      <div className="fixed top-0 left-0 right-0 z-50 bg-white border-b">
+        <ExerciseHeader 
+          name={exercise.name}
+          timeRemaining={currentExercise.timeRemaining}
+          isActive={currentExercise.isTimerActive}
+        />
+      </div>
 
-      <main className="flex-1 overflow-y-auto px-4 pb-32 pt-4">
-        <div className="max-w-2xl mx-auto space-y-6">
-          {currentState.phase === 'setup' && (
-            <SetupSlide
-              exercise={currentExercise}
-              state={currentState}
-              onTimerStart={startExercise}
-              onTimerStop={pauseExercise}
-              onAnswerSelected={handleResponse}
-            />
-          )}
+      <main className="flex-1 overflow-y-auto px-4 pb-32 pt-20">
+        <div className="max-w-2xl mx-auto">
+          {exerciseStates.map((exerciseState) => {
+            const exercise = exercises[exerciseState.id]
+            
+            return (
+              <div 
+                key={exerciseState.id} 
+                className="mb-6"
+                ref={getSetupRef(exerciseState.id)}
+              >
+                <SetupSlide
+                  exercise={exercise}
+                  state={exerciseState}
+                  onTimerStart={startExercise}
+                  onTimerStop={pauseExercise}
+                  onAnswerSelected={submitResponse}
+                />
 
-          {currentState.phase !== 'setup' && (
-            <InstructionSlide
-              exercise={currentExercise}
-              state={currentState}
-              onTimerStart={startExercise}
-              onTimerStop={pauseExercise}
-              onAnswerSelected={handleResponse}
-            />
-          )}
+                {exerciseState.phase !== 'setup' && (
+                  <div className="mt-6">
+                    <InstructionSlide
+                      ref={getInstructionRef}
+                      exercise={exercise}
+                      state={exerciseState}
+                      onTimerStart={startExercise}
+                      onTimerStop={pauseExercise}
+                      onAnswerSelected={submitResponse}
+                    />
+                  </div>
+                )}
 
-          {currentState.visibleQuestions.map((questionId) => (
-            <QuestionSlide
-              key={questionId}
-              exercise={currentExercise}
-              state={currentState}
-              questionId={questionId}
-              onTimerStart={startExercise}
-              onTimerStop={pauseExercise}
-              onAnswerSelected={handleResponse}
-            />
-          ))}
+                {exerciseState.visibleQuestions.map((questionId) => (
+                  <div key={questionId} className="mt-6">
+                    <QuestionSlide
+                      ref={getQuestionRef(questionId)}
+                      exercise={exercise}
+                      state={exerciseState}
+                      questionId={questionId}
+                      onTimerStart={startExercise}
+                      onTimerStop={pauseExercise}
+                      onAnswerSelected={submitResponse}
+                    />
+                  </div>
+                ))}
+              </div>
+            )
+          })}
         </div>
       </main>
 
-      <ExerciseFooter
-        isActive={currentState.isTimerActive}
-        timeRemaining={currentState.timeRemaining}
-        onStart={startExercise}
-        onStop={pauseExercise}
-        canContinue={canContinue(currentState.answers)}
-      />
+      <div className="fixed bottom-0 left-0 right-0 z-50 bg-white border-t">
+        <ExerciseFooter
+          isActive={currentExercise.isTimerActive}
+          timeRemaining={currentExercise.timeRemaining}
+          onStart={startExercise}
+          onStop={pauseExercise}
+          canContinue={currentExercise.phase === 'active' && currentExercise.visibleQuestions.length > 0}
+        />
+      </div>
     </div>
   )
 }
@@ -528,8 +640,11 @@ export const QuestionSlide = forwardRef<HTMLDivElement, QuestionSlideProps>(({
               className={`w-full justify-start text-left h-auto p-4 ${
                 selectedAnswer === option.id ? 'bg-blue-50 border-blue-500 text-blue-700' : ''
               }`}
-              onClick={() => onAnswerSelected(questionId, option.id)}
-              disabled={state.answers[questionId] !== undefined}
+              onClick={() => {
+                if (!selectedAnswer) {
+                  onAnswerSelected(questionId, option.id)
+                }
+              }}
             >
               {option.text}
             </Button>
@@ -763,23 +878,18 @@ export const questions: Record<string, Question> = {
   },
   'stop': {
     id: 'stop',
-    text: 'We should stop this exercise. Would you like to try a different position?',
+    text: 'We should stop this exercise.',
     options: [
-      { 
-        id: 'yes', 
-        text: 'Yes',
-        nextQuestionId: null
-      },
-      { 
-        id: 'no', 
-        text: 'No',
+      {
+        id: "return_to_dashboard",
+        text: "Return to Dashboard",
         nextQuestionId: null
       }
     ]
   },
   'completion': {
     id: 'completion',
-    text: 'Congratulations! You have completed the exercise series.',
+    text: 'This is the last exercise in the series. When you are done with it, please return to the dashboard.',
     options: [
       { 
         id: 'finish', 
@@ -801,6 +911,151 @@ File: hooks/index.ts
 export * from './use-progression-state'
 export * from './use-timer-state'
 export * from './use-response-handler'
+
+================
+File: hooks/use-exercise-scroll.ts
+================
+import { useCallback, useRef } from 'react'
+
+interface ScrollRefs {
+  questions: Record<string, HTMLDivElement | null>
+  instruction: HTMLDivElement | null
+  setup: Record<string, HTMLDivElement | null>
+}
+
+export function useExerciseScroll() {
+  const refs = useRef<ScrollRefs>({
+    questions: {},
+    instruction: null,
+    setup: {}
+  })
+
+  const scrollToElement = useCallback((element: HTMLElement | null) => {
+    if (!element) return
+
+    const offset = 80 // Fixed offset for header
+    const elementPosition = element.getBoundingClientRect().top + window.scrollY - offset
+
+    window.scrollTo({
+      top: elementPosition,
+      behavior: 'smooth'
+    })
+  }, [])
+
+  const scrollToQuestion = useCallback((questionId: string) => {
+    const element = refs.current.questions[questionId]
+    if (element) {
+      scrollToElement(element)
+    }
+  }, [scrollToElement])
+
+  const scrollToInstruction = useCallback(() => {
+    scrollToElement(refs.current.instruction)
+  }, [scrollToElement])
+
+  const scrollToSetup = useCallback((exerciseId: string) => {
+    const element = refs.current.setup[exerciseId]
+    if (element) {
+      scrollToElement(element)
+    }
+  }, [scrollToElement])
+
+  const getQuestionRef = useCallback((questionId: string) => (
+    (el: HTMLDivElement | null) => {
+      refs.current.questions[questionId] = el
+    }
+  ), [])
+
+  const getInstructionRef = useCallback((el: HTMLDivElement | null) => {
+    refs.current.instruction = el
+  }, [])
+
+  const getSetupRef = useCallback((exerciseId: string) => (
+    (el: HTMLDivElement | null) => {
+      refs.current.setup[exerciseId] = el
+    }
+  ), [])
+
+  // Single attempt scroll with a small delay
+  const scrollWithRetry = useCallback((scrollFn: () => void) => {
+    setTimeout(scrollFn, 50)
+  }, [])
+
+  return {
+    scrollToQuestion,
+    scrollToInstruction,
+    scrollToSetup,
+    getQuestionRef,
+    getInstructionRef,
+    getSetupRef,
+    scrollWithRetry
+  }
+}
+
+================
+File: hooks/use-exercise-timer.ts
+================
+import { useEffect, useRef } from 'react'
+import { useProgressionStore } from '../store/use-progression-store'
+
+export function useExerciseTimer() {
+  const { 
+    exercises,
+    currentExerciseIndex,
+    updateTimeRemaining
+  } = useProgressionStore()
+
+  const timerRef = useRef<NodeJS.Timeout | null>(null)
+  const startTimeRef = useRef<number | null>(null)
+
+  useEffect(() => {
+    const currentExercise = exercises[currentExerciseIndex]
+    if (!currentExercise) return
+
+
+    if (currentExercise.isTimerActive) {
+      // Clear any existing timer
+      if (timerRef.current) {
+        clearInterval(timerRef.current)
+      }
+
+      // Set start time when timer becomes active
+      startTimeRef.current = Date.now()
+      const initialTimeRemaining = currentExercise.timeRemaining
+
+      timerRef.current = setInterval(() => {
+        if (!startTimeRef.current) return
+
+        // Calculate elapsed time based on real time difference
+        const elapsedSeconds = Math.floor((Date.now() - startTimeRef.current) / 1000)
+        const newTimeRemaining = Math.max(0, initialTimeRemaining - elapsedSeconds)
+
+  
+
+        updateTimeRemaining(newTimeRemaining)
+
+        // Stop timer if we've reached 0
+        if (newTimeRemaining <= 0 && timerRef.current) {
+          clearInterval(timerRef.current)
+        }
+      }, 1000)
+    } else {
+      // Clear timer when not active
+      if (timerRef.current) {
+        clearInterval(timerRef.current)
+        timerRef.current = null
+      }
+      startTimeRef.current = null
+    }
+
+    // Cleanup on unmount or when dependencies change
+    return () => {
+      if (timerRef.current) {
+        clearInterval(timerRef.current)
+      }
+    }
+  }, [exercises, currentExerciseIndex, updateTimeRemaining])
+}
 
 ================
 File: hooks/use-progression-state.ts
@@ -992,7 +1247,7 @@ export function useResponseHandler({
       [questionId]: answerId
     })
 
-    if (evaluation.shouldStop) {
+    if (evaluation.shouldStop && questionId === 'stop' && answerId === 'return_to_dashboard') {
       router.push('/dashboard')
       return
     }
@@ -1119,8 +1374,13 @@ export default function ExerciseLayout({ children, className }: ExerciseLayoutPr
       className={cn(
         "min-h-[100dvh] bg-background",
         "overscroll-y-none touch-pan-y",
+        "overflow-x-hidden",
         className
       )}
+      style={{
+        scrollBehavior: 'smooth',
+        WebkitOverflowScrolling: 'touch'
+      }}
     >
       {/* Skip link for accessibility */}
       <a 
@@ -1133,7 +1393,7 @@ export default function ExerciseLayout({ children, className }: ExerciseLayoutPr
       {/* Main content */}
       <div 
         id="exercise-content"
-        className="relative"
+        className="relative scroll-smooth"
       >
         {children}
       </div>
@@ -1409,6 +1669,7 @@ File: services/exercise-progression.service.ts
 ================
 import { BaseService } from '@/lib/supabase/services/base'
 import { ProgressionSnapshot } from '../types'
+import { v4 as uuidv4 } from 'uuid'
 
 interface BaseResponse<T> {
   data: T | null
@@ -1439,6 +1700,21 @@ export class ExerciseProgressionService extends BaseService {
   private readonly progressionTable = 'exercise_progressions'
   private readonly exerciseSessionsTable = 'exercise_sessions'
   private readonly responsesTable = 'exercise_responses'
+
+  setToken(token: string) {
+    if (!token) {
+      throw new Error('Token cannot be empty')
+    }
+    console.log('Setting token:', token.slice(0, 10) + '...')
+    this.token = token
+  }
+
+  private validateToken() {
+    if (!this.token) {
+      console.error('❌ No auth token available')
+      throw new Error('Authentication token is required')
+    }
+  }
 
   async saveProgression(progression: ProgressionSnapshot): Promise<BaseResponse<ProgressionSnapshot>> {
     return this.withErrorHandling(async () => {
@@ -1579,6 +1855,211 @@ export class ExerciseProgressionService extends BaseService {
       return { data: formattedProgression, error: null }
     })
   }
+
+  async saveResponse(sessionId: string, questionId: string, answerId: string): Promise<BaseResponse<any>> {
+    return this.withErrorHandling(async () => {
+      console.log('=== Saving Response to Database ===')
+      console.log('Session ID:', sessionId)
+      console.log('Question ID:', questionId)
+      console.log('Answer ID:', answerId)
+
+      this.validateToken()
+      const client = await this.getClient(this.token)
+      
+      const response = {
+        id: uuidv4(),
+        session_id: sessionId,
+        question_id: questionId,
+        answer_id: answerId,
+        timestamp: new Date().toISOString()
+      }
+
+      console.log('Inserting response:', response)
+      
+      const { data, error } = await client
+        .from(this.responsesTable)
+        .insert(response)
+        .select()
+        .single()
+
+      if (error) {
+        console.error('❌ Database error:', error)
+        throw error
+      }
+
+      console.log('✅ Response saved successfully:', data)
+      return { data, error: null }
+    })
+  }
+
+  async createSeries(seriesId: string): Promise<BaseResponse<any>> {
+    return this.withErrorHandling(async () => {
+      console.log('=== Creating Exercise Series ===')
+      console.log('Series ID:', seriesId)
+
+      this.validateToken()
+      const client = await this.getClient(this.token)
+      
+      // Get user ID directly from JWT token
+      try {
+        if (!this.token) {
+          throw new Error('No token available')
+        }
+
+        // Decode JWT to get sub claim
+        const [headerB64, payloadB64] = this.token.split('.')
+        if (!payloadB64) {
+          throw new Error('Invalid JWT format')
+        }
+
+        // Add padding if needed
+        const base64 = payloadB64.replace(/-/g, '+').replace(/_/g, '/')
+        const pad = base64.length % 4
+        const paddedBase64 = pad ? base64 + '='.repeat(4 - pad) : base64
+
+        const decodedPayload = JSON.parse(atob(paddedBase64))
+        const userId = decodedPayload.sub
+
+        if (!userId) {
+          console.error('❌ No user ID in JWT')
+          throw new Error('No user ID in JWT')
+        }
+
+        console.log('Creating series for user:', userId)
+
+        const series = {
+          id: seriesId,
+          user_id: userId,
+          status: 'in_progress',
+          started_at: new Date().toISOString()
+        }
+
+        console.log('Creating series:', series)
+        
+        const { data, error } = await client
+          .from('exercise_series')
+          .insert(series)
+          .select()
+          .single()
+
+        if (error) {
+          console.error('❌ Database error:', error)
+          throw error
+        }
+
+        console.log('✅ Series created successfully:', data)
+        return { data, error: null }
+      } catch (error) {
+        console.error('❌ Failed to decode JWT or create series:', error)
+        throw error
+      }
+    })
+  }
+
+  async createSession(seriesId: string, exerciseId: string, sessionId: string): Promise<BaseResponse<any>> {
+    return this.withErrorHandling(async () => {
+      console.log('=== Creating Exercise Session ===')
+      console.log('Series ID:', seriesId)
+      console.log('Exercise ID:', exerciseId)
+      console.log('Session ID:', sessionId)
+
+      this.validateToken()
+      const client = await this.getClient(this.token)
+      
+      const session = {
+        id: sessionId,
+        series_id: seriesId,
+        exercise_id: exerciseId,
+        status: 'in_progress',
+        started_at: new Date().toISOString()
+      }
+
+      console.log('Creating session:', session)
+      
+      const { data, error } = await client
+        .from('exercise_sessions')
+        .insert(session)
+        .select()
+        .single()
+
+      if (error) {
+        console.error('❌ Database error:', error)
+        throw error
+      }
+
+      console.log('✅ Session created successfully:', data)
+      return { data, error: null }
+    })
+  }
+
+  async getToken(): Promise<string | null> {
+    try {
+      const client = await this.getClient()
+      const { data: { session }, error } = await client.auth.getSession()
+      
+      if (error) {
+        console.error('❌ Failed to get auth session:', error)
+        return null
+      }
+
+      return session?.access_token ?? null
+    } catch (error) {
+      console.error('❌ Error getting token:', error)
+      return null
+    }
+  }
+
+  async updateSession(sessionId: string, updates: { status: string; completed_at?: string; stop_reason?: string }): Promise<BaseResponse<any>> {
+    return this.withErrorHandling(async () => {
+      console.log('=== Updating Exercise Session ===')
+      console.log('Session ID:', sessionId)
+      console.log('Updates:', updates)
+
+      this.validateToken()
+      const client = await this.getClient(this.token)
+      
+      const { data, error } = await client
+        .from('exercise_sessions')
+        .update(updates)
+        .eq('id', sessionId)
+        .select()
+        .single()
+
+      if (error) {
+        console.error('❌ Database error:', error)
+        throw error
+      }
+
+      console.log('✅ Session updated successfully:', data)
+      return { data, error: null }
+    })
+  }
+
+  async updateSeries(seriesId: string, updates: { status: string; completed_at?: string }): Promise<BaseResponse<any>> {
+    return this.withErrorHandling(async () => {
+      console.log('=== Updating Exercise Series ===')
+      console.log('Series ID:', seriesId)
+      console.log('Updates:', updates)
+
+      this.validateToken()
+      const client = await this.getClient(this.token)
+      
+      const { data, error } = await client
+        .from('exercise_series')
+        .update(updates)
+        .eq('id', seriesId)
+        .select()
+        .single()
+
+      if (error) {
+        console.error('❌ Database error:', error)
+        throw error
+      }
+
+      console.log('✅ Series updated successfully:', data)
+      return { data, error: null }
+    })
+  }
 }
 
 ================
@@ -1597,6 +2078,16 @@ import {
 
 export class ProgressionRulesService {
   evaluateResponses(responses: ResponseSet): ResponseEvaluation {
+    // Check for return to dashboard response first
+    if (responses.stop === 'return_to_dashboard' || responses.completion === 'finish') {
+      return {
+        canProgress: false,
+        shouldStop: true,
+        nextQuestionId: null,
+        message: 'Returning to dashboard'
+      }
+    }
+
     // If no initial response yet, can't evaluate
     if (!responses.initial) {
       return {
@@ -1610,7 +2101,8 @@ export class ProgressionRulesService {
     if (responses.initial === 'worse') {
       return {
         canProgress: false,
-        shouldStop: true,
+        shouldStop: false,
+        nextQuestionId: 'stop',
         message: 'Exercise stopped due to worsening symptoms'
       }
     }
@@ -1628,8 +2120,21 @@ export class ProgressionRulesService {
     if (responses.location === 'peripheral') {
       return {
         canProgress: false,
-        shouldStop: true,
+        shouldStop: false,
+        nextQuestionId: 'stop',
         message: 'Exercise stopped due to symptoms moving peripherally'
+      }
+    }
+
+    // For the last exercise, if we have good responses, show completion instead of continue
+    if (responses.exerciseId === '3' && 
+        (responses.initial === 'better' || responses.initial === 'same') && 
+        (responses.location === 'central' || responses.location === 'same')) {
+      return {
+        canProgress: false,
+        shouldStop: false,
+        nextQuestionId: 'completion',
+        message: 'Exercise series completed'
       }
     }
 
@@ -1672,11 +2177,470 @@ export class ProgressionRulesService {
         return response === 'yes' ? null : 'stop'
       case 'stop':
         return null
+      case 'completion':
+        return null
       default:
         return 'initial'
     }
   }
 }
+
+================
+File: store/use-progression-store.ts
+================
+import { create } from 'zustand'
+import { v4 as uuidv4 } from 'uuid'
+import { Exercise, ProgressionStatus } from '../types'
+import { ProgressionRulesService } from '../services'
+import { exercises } from '../data/exercise-content'
+import { ExerciseProgressionService } from '../services'
+
+interface ExerciseState {
+  id: string
+  sessionId: string
+  phase: 'setup' | 'active' | 'complete'
+  timeRemaining: number
+  isTimerActive: boolean
+  currentQuestionId: string | null
+  answers: Record<string, string>
+  visibleQuestions: string[]
+  startedAt?: string
+  completedAt?: string
+}
+
+interface ProgressionStore {
+  // State
+  seriesId: string | null
+  exercises: ExerciseState[]
+  currentExerciseIndex: number
+  status: ProgressionStatus
+  shouldScrollToNewExercise: boolean
+  authToken: string | null
+
+  // Actions
+  initializeExercise: (exercise: Exercise, token: string) => Promise<void>
+  startExercise: () => Promise<void>
+  pauseExercise: () => void
+  submitResponse: (questionId: string, answerId: string) => Promise<void>
+  updateTimeRemaining: (timeRemaining: number) => void
+  addNextExercise: (exercise: Exercise) => void
+  handleEarlyStop: (reason: string) => void
+}
+
+const rulesService = new ProgressionRulesService()
+const exerciseProgressionService = new ExerciseProgressionService()
+
+export const useProgressionStore = create<ProgressionStore>((set, get) => ({
+  seriesId: null,
+  exercises: [],
+  currentExerciseIndex: 0,
+  status: 'not_started',
+  shouldScrollToNewExercise: false,
+  authToken: null,
+
+  initializeExercise: async (exercise: Exercise, token: string) => {
+    console.log('Setting up initial exercise state:', exercise.id)
+    
+    // Just set up the initial UI state and store the token
+    set({
+      authToken: token,
+      exercises: [{
+        id: exercise.id,
+        sessionId: '', // Will be set when exercise starts
+        phase: 'setup',
+        timeRemaining: exercise.duration,
+        isTimerActive: false,
+        currentQuestionId: null,
+        answers: {},
+        visibleQuestions: [],
+        startedAt: undefined
+      }]
+    })
+  },
+
+  startExercise: async () => {
+    console.log('Starting exercise at index:', get().currentExerciseIndex)
+    const state = get()
+    const currentExercise = state.exercises[state.currentExerciseIndex]
+
+    try {
+      // Set the token in the service
+      exerciseProgressionService.setToken(state.authToken!)
+      console.log('✅ Auth token set for exercise start')
+
+      // Create series if this is the first exercise
+      let seriesId = state.seriesId
+      if (!seriesId) {
+        seriesId = uuidv4()
+        console.log('Creating new exercise series...')
+        const { error: seriesError } = await exerciseProgressionService.createSeries(seriesId)
+        if (seriesError) {
+          console.error('❌ Failed to create series:', seriesError)
+          throw seriesError
+        }
+        console.log('✅ Series created successfully')
+        set({ seriesId })
+      }
+
+      // Create session for this exercise
+      const sessionId = uuidv4()
+      console.log('Creating new exercise session...', {
+        seriesId,
+        exerciseId: currentExercise.id,
+        sessionId
+      })
+      
+      const { error: sessionError } = await exerciseProgressionService.createSession(
+        seriesId,
+        currentExercise.id,
+        sessionId
+      )
+      if (sessionError) {
+        console.error('❌ Failed to create session:', sessionError)
+        throw sessionError
+      }
+      console.log('✅ Session created successfully')
+
+      // Update the UI state
+      set(state => ({
+        status: 'in_progress',
+        exercises: state.exercises.map((exercise, index) =>
+          index === state.currentExerciseIndex
+            ? {
+                ...exercise,
+                sessionId,
+                phase: 'active',
+                isTimerActive: true,
+                startedAt: new Date().toISOString()
+              }
+            : exercise
+        )
+      }))
+    } catch (error) {
+      console.error('❌ Failed to start exercise:', error)
+      throw error
+    }
+  },
+
+  pauseExercise: () => {
+    console.log('Pausing exercise at index:', get().currentExerciseIndex)
+    set(state => ({
+      exercises: state.exercises.map((exercise, index) =>
+        index === state.currentExerciseIndex
+          ? { ...exercise, isTimerActive: false }
+          : exercise
+      )
+    }))
+  },
+
+  submitResponse: async (questionId: string, answerId: string) => {
+    try {
+      console.log('=== Submitting Response ===')
+      console.log('Question ID:', questionId)
+      console.log('Answer ID:', answerId)
+      
+      const state = get()
+      const currentExercise = state.exercises[state.currentExerciseIndex]
+      
+      console.log('Current Exercise State:', {
+        id: currentExercise.id,
+        sessionId: currentExercise.sessionId,
+        phase: currentExercise.phase,
+        answers: currentExercise.answers
+      })
+
+      // Save response to database
+      if (answerId !== '') {
+        try {
+          console.log('Saving response to database...')
+          await exerciseProgressionService.saveResponse(
+            currentExercise.sessionId,
+            questionId,
+            answerId
+          )
+          console.log('✅ Response saved successfully')
+        } catch (error) {
+          console.error('❌ Failed to save response:', error)
+        }
+      }
+
+      const updatedExercises = state.exercises.map((exercise, index) =>
+        index === state.currentExerciseIndex
+          ? { ...exercise, answers: { ...exercise.answers, [questionId]: answerId } }
+          : exercise
+      )
+
+      const evaluation = rulesService.evaluateResponses({
+        ...currentExercise.answers,
+        [questionId]: answerId
+      })
+
+      console.log('Response Evaluation:', {
+        evaluation,
+        currentAnswers: { ...currentExercise.answers, [questionId]: answerId }
+      })
+
+      if (evaluation.shouldStop) {
+        console.log('Exercise should stop:', evaluation.message)
+        if (answerId === 'worse' || answerId === 'peripheral') {
+          console.log('Stopping exercise due to negative response')
+          await get().handleEarlyStop(
+            answerId === 'worse' ? 'worse_symptoms' : 'peripheral_pain'
+          )
+          set({ status: 'stopped_early' })
+          return
+        }
+      }
+
+      // Handle return to dashboard
+      if (questionId === 'stop' && answerId === 'return_to_dashboard' || 
+          questionId === 'completion' && answerId === 'finish') {
+        console.log('Returning to dashboard')
+        
+        try {
+          // Update session status
+          console.log('Updating session status...')
+          const { error: sessionError } = await exerciseProgressionService.updateSession(
+            currentExercise.sessionId,
+            {
+              status: 'completed',
+              completed_at: new Date().toISOString()
+            }
+          )
+          if (sessionError) {
+            console.error('❌ Failed to update session:', sessionError)
+            throw sessionError
+          }
+
+          // Update series status only when explicitly stopping
+          console.log('Updating series status...')
+          const { error: seriesError } = await exerciseProgressionService.updateSeries(
+            state.seriesId!,
+            {
+              status: questionId === 'stop' ? 'cancelled' : 'completed',
+              completed_at: new Date().toISOString()
+            }
+          )
+          if (seriesError) {
+            console.error('❌ Failed to update series:', seriesError)
+            throw seriesError
+          }
+
+          console.log('✅ Successfully updated session and series status')
+        } catch (error) {
+          console.error('❌ Failed to update status:', error)
+        }
+
+        set({
+          status: questionId === 'stop' ? 'stopped_early' : 'completed',
+          exercises: updatedExercises.map((exercise, index) =>
+            index === state.currentExerciseIndex
+              ? { ...exercise, completedAt: new Date().toISOString() }
+              : exercise
+          )
+        })
+        window.location.href = '/dashboard'
+        return
+      }
+
+      // Check if we should progress to next exercise
+      const shouldProgress = !evaluation.nextQuestionId && 
+        (answerId === 'yes' || answerId === 'better' || answerId === 'central')
+
+      if (shouldProgress) {
+        console.log('=== Exercise Progression ===')
+        console.log('Current exercise:', currentExercise.id)
+        console.log('Trigger answer:', { questionId, answerId })
+        
+        const nextExerciseId = String(parseInt(currentExercise.id) + 1)
+        const nextExercise = exercises[nextExerciseId]
+
+        if (nextExercise) {
+          const nextSessionId = uuidv4()
+          console.log('Next exercise details:', {
+            id: nextExerciseId,
+            sessionId: nextSessionId,
+            exercise: nextExercise
+          })
+
+          try {
+            // Update current session as completed
+            console.log('Updating current session status to completed...')
+            const { error: sessionError } = await exerciseProgressionService.updateSession(
+              currentExercise.sessionId,
+              {
+                status: 'completed',
+                completed_at: new Date().toISOString()
+              }
+            )
+
+            if (sessionError) {
+              console.error('❌ Failed to update current session:', sessionError)
+              throw sessionError
+            }
+            console.log('✅ Current session updated successfully')
+
+            // Create new session for next exercise
+            console.log('Creating new session...')
+            const { error: newSessionError } = await exerciseProgressionService.createSession(
+              state.seriesId!,
+              nextExerciseId,
+              nextSessionId
+            )
+
+            if (newSessionError) {
+              console.error('❌ Failed to create session for next exercise:', newSessionError)
+              throw newSessionError
+            }
+            console.log('✅ New session created successfully')
+
+            // Update UI state to show next exercise
+            const newState = {
+              exercises: [
+                ...updatedExercises,
+                {
+                  id: nextExerciseId,
+                  sessionId: nextSessionId,
+                  phase: 'setup' as const,
+                  timeRemaining: nextExercise.duration,
+                  isTimerActive: false,
+                  currentQuestionId: null,
+                  answers: {},
+                  visibleQuestions: [],
+                  startedAt: new Date().toISOString()
+                }
+              ],
+              currentExerciseIndex: state.exercises.length,
+              shouldScrollToNewExercise: true,
+              status: 'in_progress' as const // Keep series in progress
+            }
+            console.log('Setting new state:', newState)
+            set((state) => ({
+              ...state,
+              ...newState
+            }))
+            console.log('✅ UI state updated for next exercise')
+          } catch (error) {
+            console.error('❌ Failed to progress to next exercise:', error)
+            throw error
+          }
+          return
+        } else {
+          // This is the final exercise and they've completed it successfully
+          console.log('Final exercise completed')
+          set({
+            exercises: updatedExercises.map((exercise, index) =>
+              index === state.currentExerciseIndex
+                ? {
+                    ...exercise,
+                    currentQuestionId: 'completion',
+                    visibleQuestions: [...exercise.visibleQuestions, 'completion']
+                  }
+                : exercise
+            )
+          })
+          return
+        }
+      }
+
+      // Update visible questions if there's a next question
+      if (evaluation.nextQuestionId) {
+        console.log('Adding next question:', evaluation.nextQuestionId)
+        set({
+          exercises: updatedExercises.map((exercise, index) =>
+            index === state.currentExerciseIndex
+              ? {
+                  ...exercise,
+                  currentQuestionId: evaluation.nextQuestionId!,
+                  visibleQuestions: exercise.visibleQuestions.includes(evaluation.nextQuestionId!)
+                    ? exercise.visibleQuestions
+                    : [...exercise.visibleQuestions, evaluation.nextQuestionId!]
+                }
+              : exercise
+          )
+        })
+      }
+    } catch (error) {
+      console.error('❌ Error submitting response:', error)
+    }
+  },
+
+  updateTimeRemaining: (timeRemaining: number) => {
+    set(state => ({
+      exercises: state.exercises.map((exercise, index) =>
+        index === state.currentExerciseIndex
+          ? { ...exercise, timeRemaining }
+          : exercise
+      )
+    }))
+  },
+
+  addNextExercise: (exercise: Exercise) => {
+    console.log('Adding next exercise:', exercise.id)
+    set(state => ({
+      exercises: [
+        ...state.exercises,
+        {
+          id: exercise.id,
+          sessionId: '', // Will be set when exercise starts
+          phase: 'setup',
+          timeRemaining: exercise.duration,
+          isTimerActive: false,
+          currentQuestionId: null,
+          answers: {},
+          visibleQuestions: [],
+          startedAt: new Date().toISOString()
+        }
+      ],
+      currentExerciseIndex: state.exercises.length
+    }))
+  },
+
+  handleEarlyStop: async (reason: string) => {
+    console.log('Handling early stop:', reason)
+    const state = get()
+    const currentExercise = state.exercises[state.currentExerciseIndex]
+
+    try {
+      // Set the token in the service
+      exerciseProgressionService.setToken(state.authToken!)
+
+      // Update session status
+      console.log('Updating session status to stopped...')
+      const { error: sessionError } = await exerciseProgressionService.updateSession(
+        currentExercise.sessionId,
+        {
+          status: 'cancelled',
+          completed_at: new Date().toISOString(),
+          stop_reason: reason
+        }
+      )
+      if (sessionError) {
+        console.error('❌ Failed to update session:', sessionError)
+        throw sessionError
+      }
+
+      // Update series status
+      console.log('Updating series status to stopped...')
+      const { error: seriesError } = await exerciseProgressionService.updateSeries(
+        state.seriesId!,
+        {
+          status: 'cancelled',
+          completed_at: new Date().toISOString()
+        }
+      )
+      if (seriesError) {
+        console.error('❌ Failed to update series:', seriesError)
+        throw seriesError
+      }
+
+      console.log('✅ Successfully updated session and series status')
+    } catch (error) {
+      console.error('❌ Failed to handle early stop:', error)
+      throw error
+    }
+  }
+}))
 
 ================
 File: types/exercise.types.ts
